@@ -7,6 +7,8 @@ import asyncio
 import json
 from datetime import timedelta
 from dotenv import load_dotenv
+from flask import Flask
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -1752,6 +1754,32 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         await interaction.response.send_message(f"Something went wonky! 🤪 Error: {str(error)}", ephemeral=True)
 
+# Simple Flask web server for Render Web Service compatibility
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return {
+        "status": "online",
+        "bot_name": "Goofy Mod Bot",
+        "message": "🤪 Bot is running! This endpoint keeps the web service alive on Render.",
+        "servers": len(bot.guilds) if bot.is_ready() else 0
+    }
+
+@app.route('/health')
+def health():
+    return {
+        "status": "healthy",
+        "bot_ready": bot.is_ready(),
+        "servers": len(bot.guilds) if bot.is_ready() else 0
+    }
+
+def run_web_server():
+    """Run Flask web server"""
+    port = int(os.getenv('PORT', 5000))  # Render provides PORT env var
+    print(f"🌐 Starting web server on port {port}...")
+    app.run(host='0.0.0.0', port=port, debug=False)
+
 # Optimize for Render deployment
 if __name__ == "__main__":
     token = os.getenv('DISCORD_BOT_TOKEN')
@@ -1759,9 +1787,16 @@ if __name__ == "__main__":
         print("❌ No bot token found! Please set DISCORD_BOT_TOKEN in your environment variables!")
         exit(1)
     
-    print("🚀 Starting Goofy Mod bot...")
+    print("🚀 Starting Goofy Mod bot with web server...")
     
     try:
+        # Start Flask web server in a separate thread
+        web_thread = threading.Thread(target=run_web_server, daemon=True)
+        web_thread.start()
+        print("✅ Web server started!")
+        
+        # Start Discord bot (this blocks)
+        print("🤖 Starting Discord bot...")
         bot.run(token)
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped by user")
