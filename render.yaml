@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: goofy-mod-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false  # Set this manually in Render dashboard
+    autoDeploy: true
+    preDeployCommand: echo "Deploying Goofy Mod Bot with maximum brainrot energy!"
