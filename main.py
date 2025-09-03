@@ -1147,10 +1147,12 @@ async def help_slash(interaction: discord.Interaction):
         name="🔨 Moderation Commands",
         value="`/ban` - Ban someone to the shadow realm\n"
               "`/kick` - Yeet someone out\n"
-              "`/mute [duration] [reason]` - Silence the chaos\n"
+              "`/mute [duration] [reason]` - Silence the chaos (5m, 2h, 1d or permanent)\n"
               "`/unmute` - Restore their voice\n"
-              "`/warn` - Give a friendly warning\n"
-              "`/unwarn` - Remove warnings\n"
+              "`/warn` - Give a friendly warning (auto-tracks count)\n"
+              "`/unwarn [count]` - Remove specific number of warnings\n"
+              "`/warnings @user` - View user's warning history\n"
+              "`/clearwarnings @user` - Clear all warnings for user\n"
               "`/purge [amount]` - Clean up the mess\n"
               "`/slowmode [seconds]` - Control the yapping speed",
         inline=False
@@ -1158,7 +1160,9 @@ async def help_slash(interaction: discord.Interaction):
     
     embed.add_field(
         name="🤖 Auto-Moderation",
-        value="`/automod [feature] [on/off]` - Configure auto-mod\n"
+        value="`/automod [feature] [enabled] [action] [max_warnings]` - Configure auto-mod with actions\n"
+              "• **Features:** Spam, Caps, Mentions, Repeat Messages, Warning Escalation\n" 
+              "• **Actions:** Warn, Mute, Kick, Ban\n"
               "`/automodstatus` - Check auto-mod settings",
         inline=False
     )
