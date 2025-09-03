@@ -466,7 +466,17 @@ GOOFY_RESPONSES = {
         "🚫 That's not very skibidi of you, now you're banned fr fr",
         "⚰️ RIP bozo, got absolutely ratioed by the ban hammer",
         "🤡 Imagine getting banned, couldn't be me... oh wait it's literally you",
-        "🧻 Your vibes were NOT it chief, time to touch grass permanently"
+        "🧻 Your vibes were NOT it chief, time to touch grass permanently",
+        "💀 Lil bro really thought they could act up and get away with it LMAOOO",
+        "🔥 They got FANUM TAXED from existence! No cap! 💯",
+        "🍑 GYAT damn, they really thought they were the main character! 💀",
+        "✨ Their aura points went straight to NEGATIVE INFINITY! 📉",
+        "🧠 That's what happens when your brainrot levels exceed the server limit!",
+        "⚡ They got RATIO'd by the ban hammer and sent to Ohio permanently! 🌽",
+        "💅 Bestie really said 'let me be chaotic' and got YEETED instead!",
+        "🚨 BREAKING: Local user discovers consequences, immediately gets banned!",
+        "🎭 Plot twist! They're not the main character - they're the villain who got defeated!",
+        "🏃‍♂️ Bro speedran getting banned any% world record! 🏆"
     ],
     'kick': [
         "🦶 *kick* They've been punted like a football! 🏈",
@@ -478,7 +488,17 @@ GOOFY_RESPONSES = {
         "💨 They said 'it's giving main character energy' but got kicked instead",
         "🏃‍♂️ Time to touch grass buddy, you've been EJECTED",
         "🎭 That was lowkey sus behavior, now they're highkey gone",
-        "⭐ No cap, they got sent to the backrooms fr"
+        "⭐ No cap, they got sent to the backrooms fr",
+        "💀 Lil bro got absolutely SENT to another dimension! 🌌",
+        "🔥 They got FANUM TAXED right out the server! No refunds! 💸",
+        "🧠 Their Ohio energy was too powerful for this realm! 🌽",
+        "✨ Lost all their aura points and got EJECTED! 📉",
+        "💅 That wasn't very demure, very mindful, very cutesy of them!",
+        "🚨 YEET ALERT! Someone just got absolutely LAUNCHED!",
+        "🎯 They said 'I'm him' but the server said 'no you're not' 💀",
+        "⚡ Sigma male grindset: Step 1) Get kicked from server 📊",
+        "🎪 They really thought they ate that... but got served instead!",
+        "🏆 Congratulations! You've unlocked the 'Touch Grass' achievement!"
     ],
     'mute': [
         "🤐 Shhhh! They're in quiet time now! 🤫",
@@ -490,7 +510,17 @@ GOOFY_RESPONSES = {
         "🤫 Your Ohio energy was too powerful, time for a break",
         "💀 Stop the cap! Muted for being too zesty",
         "📵 Skibidi toilet broke so now you can't speak either",
-        "🧠 Brainrot levels were off the charts, cooling down required"
+        "🧠 Brainrot levels were off the charts, cooling down required",
+        "🎤 Lil bro's yapping license has been REVOKED! 📜❌",
+        "💀 They were giving too much main character energy, time to be an NPC!",
+        "✨ Their aura points said 'I need a break' 📉",
+        "🔥 The yapping was NOT bussin, time for silence! 🤐",
+        "🚨 YAPPING OVERLOAD DETECTED! Initiating emergency quiet mode!",
+        "💅 Bestie was serving too much chaos, now they're serving silence!",
+        "🧠 Their brainrot content exceeded the daily limit! 📊",
+        "⚡ Sigma grindset pause: Step 1) Stop yapping 🤫",
+        "🎯 Plot twist: The main character just became a silent film! 🎬",
+        "🌽 Too much Ohio energy detected! Cooling down in silent mode!"
     ],
     'warn': [
         "⚠️ That's a yellow card! ⚠️ One more and you're outta here! 🟨",
@@ -1276,6 +1306,366 @@ async def random_slash(interaction: discord.Interaction):
         description=f"🎯 **Chosen One:** {chosen.mention}\n\n**Why them?** {random.choice(reasons)}",
         color=0x00FF88
     )
+    await interaction.response.send_message(embed=embed)
+
+# VIRAL GEN ALPHA COMMANDS 🔥🔥🔥
+@tree.command(name='yapping', description='Check someone\'s yapping levels - are they cooked? 🗣️')
+@app_commands.describe(user='Who\'s yapping too much?')
+async def yapping_slash(interaction: discord.Interaction, user: discord.Member = None):
+    target = user or interaction.user
+    yap_level = random.randint(1, 100)
+    
+    yap_messages = [
+        f"{target.mention} is absolutely SENDING with their yapping! 🗣️💨",
+        f"Bro {target.mention} hasn't stopped yapping since 2019 💀",
+        f"{target.mention} could yap about grass for 47 hours straight 🌱",
+        f"Someone give {target.mention} a yapping license already! 📜",
+        f"{target.mention} is the final boss of yapping contests 👑",
+        f"Netflix wants to make a documentary about {target.mention}'s yapping skills 🎬",
+        f"{target.mention} could yap their way out of the backrooms 🚪",
+        f"AI got jealous of {target.mention}'s yapping algorithm 🤖"
+    ]
+    
+    if yap_level < 20:
+        status = "🤐 Silent Mode (Sus behavior detected)"
+    elif yap_level < 40:
+        status = "😶 Quiet Kid Energy"
+    elif yap_level < 60:
+        status = "💬 Normal Human Chatter"
+    elif yap_level < 80:
+        status = "🗣️ Professional Yapper"
+    else:
+        status = "💀 ABSOLUTE UNIT OF YAPPING"
+    
+    embed = discord.Embed(
+        title="🗣️ YAPPING SCANNER ACTIVATED",
+        description=random.choice(yap_messages),
+        color=0xFF4500
+    )
+    embed.add_field(name="📊 Yap Level", value=f"{yap_level}/100", inline=True)
+    embed.add_field(name="🎭 Status", value=status, inline=True)
+    embed.add_field(name="💡 Recommendation", 
+                   value="Touch grass" if yap_level > 80 else "Keep grinding that sigma yapping energy", 
+                   inline=False)
+    embed.set_footer(text="Yapping levels measured by certified brainrot scientists")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='zesty-check', description='Check someone\'s zesty levels fr fr 💅')
+@app_commands.describe(user='Who needs a zesty scan?')
+async def zesty_check_slash(interaction: discord.Interaction, user: discord.Member = None):
+    target = user or interaction.user
+    zesty_level = random.randint(1, 100)
+    
+    zesty_comments = [
+        f"{target.mention} is serving absolute zesty energy and we're here for it! 💅✨",
+        f"The zestiness is RADIATING from {target.mention} rn 🌈",
+        f"{target.mention} woke up and chose zesty violence today 💀",
+        f"Someone call the zesty police, {target.mention} is too powerful! 🚨",
+        f"{target.mention}'s zesty aura could power a small city 🏙️",
+        f"Breaking: {target.mention} has been crowned the Zesty Monarch 👑",
+        f"{target.mention} is giving main character zesty vibes and honestly? Valid 📚",
+        f"The zesty levels are off the charts! {target.mention} broke the scanner! 📊"
+    ]
+    
+    if zesty_level < 20:
+        vibe = "🗿 Stone Cold Sigma Energy"
+    elif zesty_level < 40:
+        vibe = "😎 Cool but Zesty Undertones"
+    elif zesty_level < 60:
+        vibe = "💅 Moderately Zesty Queen"
+    elif zesty_level < 80:
+        vibe = "🌈 FULL ZESTY MODE ACTIVATED"
+    else:
+        vibe = "✨ LEGENDARY ZESTY OVERLORD ✨"
+    
+    embed = discord.Embed(
+        title="💅 ZESTY SCANNER RESULTS",
+        description=random.choice(zesty_comments),
+        color=0xFF69B4
+    )
+    embed.add_field(name="📈 Zesty Level", value=f"{zesty_level}/100", inline=True)
+    embed.add_field(name="✨ Zesty Vibe", value=vibe, inline=True)
+    embed.add_field(name="🎯 Status", 
+                   value="Absolutely iconic behavior 💅" if zesty_level > 50 else "Needs more zesty energy 📈", 
+                   inline=False)
+    embed.set_footer(text="Zestiness certified by the International Brainrot Institute")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='lil-bro', description='Call someone lil bro with maximum disrespect 👶')
+@app_commands.describe(user='Which lil bro needs to be humbled?')
+async def lil_bro_slash(interaction: discord.Interaction, user: discord.Member):
+    lil_bro_roasts = [
+        f"Lil bro {user.mention} really thought they did something 💀",
+        f"{user.mention} lil bro energy is SENDING me 😭",
+        f"Nah {user.mention}, lil bro needs to sit down and humble themselves fr",
+        f"Lil bro {user.mention} really acting like the main character 🤡",
+        f"{user.mention} giving major lil bro vibes and it's not giving what they think it's giving",
+        f"Someone tell lil bro {user.mention} this ain't it chief 📢",
+        f"Lil bro {user.mention} woke up and chose delusion I guess 🤷‍♂️",
+        f"{user.mention} really said 'let me be extra lil bro today' and went OFF 💅",
+        f"POV: Lil bro {user.mention} thinks they're sigma but they're actually just... lil bro 💀",
+        f"Not {user.mention} giving lil bro energy in the year of our lord 2025 😤"
+    ]
+    
+    embed = discord.Embed(
+        title="👶 LIL BRO DETECTED",
+        description=random.choice(lil_bro_roasts),
+        color=0xFFB6C1
+    )
+    embed.add_field(name="🎯 Lil Bro Level", value="MAXIMUM OVERDRIVE", inline=True)
+    embed.add_field(name="💡 Advice", value="Try being less lil bro", inline=True)
+    embed.set_footer(text="Lil bro behavior documented for posterity")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='no-cap', description='Verify if something is actually no cap or pure cap 🧢')
+@app_commands.describe(statement='What needs the no cap verification?')
+async def no_cap_slash(interaction: discord.Interaction, statement: str):
+    is_cap = random.choice([True, False])
+    cap_level = random.randint(1, 100)
+    
+    if is_cap:
+        cap_responses = [
+            f"That's CAP and we all know it! 🧢💀",
+            f"Bestie that statement is SENDING me... straight to cap detection land 🚨",
+            f"The cap detector is SCREAMING right now 📢🧢",
+            f"Nah fam, that's more cap than a hat store 🏪",
+            f"Cap levels are off the charts! Someone call the cap police! 👮‍♂️",
+            f"That's giving major cap energy and we're not here for it 💅",
+            f"Sir/Ma'am, this is a cap-free zone. Please remove your statement 🚫",
+            f"The audacity! The cap! The absolute delusion! 🎭"
+        ]
+        verdict = "🧢 PURE CAP DETECTED"
+        color = 0xFF0000
+    else:
+        no_cap_responses = [
+            f"YO THAT'S ACTUALLY NO CAP FR FR! 💯🔥",
+            f"Finally someone said something with ZERO cap energy! ✨",
+            f"No cap detected! This person is speaking absolute FACTS! 📢",
+            f"Breaking: Someone just said something that's actually real! 📰",
+            f"The no cap sensors are going CRAZY! This is certified truth! ⚡",
+            f"NO CAP ALERT! WE HAVE AUTHENTIC CONTENT! 🚨💯",
+            f"Finally, someone who understands the assignment! NO CAP! 👑",
+            f"That's some straight up no cap energy and we RESPECT it! 🫡"
+        ]
+        verdict = "💯 CERTIFIED NO CAP"
+        color = 0x00FF00
+    
+    embed = discord.Embed(
+        title="🧢 CAP DETECTION SCANNER",
+        description=f"**Statement:** \"{statement}\"\n\n{random.choice(cap_responses if is_cap else no_cap_responses)}",
+        color=color
+    )
+    embed.add_field(name="🎯 Verdict", value=verdict, inline=True)
+    embed.add_field(name="📊 Cap Level", value=f"{cap_level if is_cap else 0}/100", inline=True)
+    embed.set_footer(text="Cap detection powered by Gen Alpha AI technology")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='bussin-meter', description='Rate how bussin something is on the bussin scale 🤤')
+@app_commands.describe(thing='What needs a bussin rating?')
+async def bussin_meter_slash(interaction: discord.Interaction, thing: str):
+    bussin_level = random.randint(1, 100)
+    
+    bussin_comments = [
+        f"YO {thing} is absolutely BUSSIN right now! 🤤💯",
+        f"That {thing} is giving bussin energy and I'm here for it! 🔥",
+        f"{thing} really said 'let me be the most bussin thing today' 😤",
+        f"BREAKING: {thing} has achieved maximum bussin status! 📢",
+        f"Someone call Gordon Ramsay, {thing} is BUSSIN BUSSIN! 👨‍🍳",
+        f"{thing} is so bussin it should be illegal in 17 states 🚨",
+        f"POV: {thing} woke up and chose to be absolutely bussin 💅",
+        f"The bussin levels are astronomical! {thing} broke the scale! 📊"
+    ]
+    
+    if bussin_level < 20:
+        rating = "🤢 Not Bussin (Actually Kinda Sus)"
+    elif bussin_level < 40:
+        rating = "😐 Mid Bussin Energy"
+    elif bussin_level < 60:
+        rating = "😋 Respectably Bussin"
+    elif bussin_level < 80:
+        rating = "🤤 ULTRA BUSSIN MODE"
+    else:
+        rating = "💀 TRANSCENDENT BUSSIN OVERLORD"
+    
+    embed = discord.Embed(
+        title="🤤 BUSSIN METER ACTIVATED",
+        description=random.choice(bussin_comments),
+        color=0xFFA500
+    )
+    embed.add_field(name="📊 Bussin Level", value=f"{bussin_level}/100", inline=True)
+    embed.add_field(name="🏆 Rating", value=rating, inline=True)
+    embed.add_field(name="💭 Final Verdict", 
+                   value="Absolutely sending it! 🚀" if bussin_level > 70 else "Needs more bussin energy 📈", 
+                   inline=False)
+    embed.set_footer(text="Bussin levels certified by the International Bussin Academy")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='fanum-tax', description='Fanum tax someone\'s food/belongings like a true alpha 🍟')
+@app_commands.describe(user='Who\'s getting fanum taxed?', item='What are you fanum taxing?')
+async def fanum_tax_slash(interaction: discord.Interaction, user: discord.Member, item: str = "their lunch"):
+    fanum_messages = [
+        f"YO {user.mention} just got FANUM TAXED! 🍟 Their {item} is now property of the alpha! 👑",
+        f"BREAKING: {user.mention}'s {item} has been officially fanum taxed! No cap! 📢",
+        f"{user.mention} thought they could keep their {item} safe... but the fanum tax collector arrived! 💀",
+        f"POV: {user.mention} learns about the fanum tax the hard way! Their {item} = GONE! 🚫",
+        f"Someone tell {user.mention} that's how the fanum tax works bestie! {item} confiscated! ✋",
+        f"The fanum tax department is claiming {user.mention}'s {item}! This is sigma behavior! 🗿",
+        f"FANUM TAX ACTIVATED! {user.mention}'s {item} belongs to the streets now! 🛣️",
+        f"{user.mention} really thought they could escape the fanum tax on their {item}! WRONG! ❌"
+    ]
+    
+    tax_rate = random.randint(50, 100)
+    
+    embed = discord.Embed(
+        title="🍟 FANUM TAX ACTIVATED",
+        description=random.choice(fanum_messages),
+        color=0xFFA500
+    )
+    embed.add_field(name="📋 Tax Receipt", value=f"**Victim:** {user.mention}\n**Item Taxed:** {item}\n**Tax Rate:** {tax_rate}%", inline=True)
+    embed.add_field(name="🏛️ Authority", value="Certified Fanum Tax Collector", inline=True)
+    embed.add_field(name="💡 Pro Tip", value="Hide your snacks better next time!", inline=False)
+    embed.set_footer(text="Fanum tax is non-negotiable and legally binding in Ohio")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='gyat-rating', description='Rate someone\'s gyat energy (respectfully) 🍑')
+@app_commands.describe(user='Who needs a gyat rating?')
+async def gyat_rating_slash(interaction: discord.Interaction, user: discord.Member = None):
+    target = user or interaction.user
+    gyat_level = random.randint(1, 100)
+    
+    gyat_comments = [
+        f"{target.mention} is serving absolute GYAT energy and we're all here for it! 🔥",
+        f"The GYAT levels are ASTRONOMICAL from {target.mention} rn! 📊💀",
+        f"GYAT ALERT! {target.mention} is causing traffic delays with those levels! 🚨",
+        f"Breaking: {target.mention} just broke the GYAT scale! Scientists are confused! 👨‍🔬",
+        f"Someone call NASA, {target.mention}'s GYAT energy is visible from space! 🛰️",
+        f"POV: {target.mention} walks by and everyone says GYAT simultaneously! 📢",
+        f"The GYAT committee has approved {target.mention} for legendary status! 🏆",
+        f"{target.mention} really said 'let me have GYAT energy today' and delivered! 💯"
+    ]
+    
+    if gyat_level < 20:
+        rating = "😐 GYAT? More like... nah"
+    elif gyat_level < 40:
+        rating = "😊 Respectful GYAT energy"
+    elif gyat_level < 60:
+        rating = "😳 GYAT confirmed!"
+    elif gyat_level < 80:
+        rating = "💀 GYAT OVERLOAD!"
+    else:
+        rating = "🚨 LEGENDARY GYAT STATUS"
+    
+    embed = discord.Embed(
+        title="🍑 GYAT RATING SCANNER",
+        description=random.choice(gyat_comments),
+        color=0xFF69B4
+    )
+    embed.add_field(name="📊 GYAT Level", value=f"{gyat_level}/100", inline=True)
+    embed.add_field(name="🏆 Rating", value=rating, inline=True)
+    embed.add_field(name="✨ Status", 
+                   value="Absolutely iconic! 👑" if gyat_level > 70 else "Keep that energy! 💪", 
+                   inline=False)
+    embed.set_footer(text="GYAT ratings certified by the International Brainrot Institute (respectfully)")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='aura-points', description='Check someone\'s aura points - are they losing aura? ✨')
+@app_commands.describe(user='Whose aura needs checking?')
+async def aura_points_slash(interaction: discord.Interaction, user: discord.Member = None):
+    target = user or interaction.user
+    aura_points = random.randint(-1000, 1000)
+    change = random.randint(-100, 100)
+    
+    if aura_points > 500:
+        status = "✨ MAXIMUM AURA ACHIEVED"
+        color = 0xFFD700
+        reaction = f"{target.mention} is literally GLOWING with aura energy! The main character energy is SENDING! 🌟"
+    elif aura_points > 0:
+        status = "😎 Positive Aura Vibes"
+        color = 0x00FF00
+        reaction = f"{target.mention} is giving good energy! Keep that sigma grindset going! 💪"
+    elif aura_points > -500:
+        status = "😬 Losing Aura (Concerning)"
+        color = 0xFFA500
+        reaction = f"{target.mention} might need to touch some grass to restore their aura! 🌱"
+    else:
+        status = "💀 AURA IN THE NEGATIVES"
+        color = 0xFF0000
+        reaction = f"{target.mention} has achieved NEGATIVE aura! This is Ohio-level energy! 🌽"
+    
+    # Determine what caused the change
+    aura_events = [
+        "Said something unhinged in chat",
+        "Failed a rizz attempt",
+        "Got caught being sus",
+        "Showed main character energy",
+        "Touched grass (rare)",
+        "Posted cringe content",
+        "Won an argument online",
+        "Got ratio'd",
+        "Made everyone laugh",
+        "Exhibited lil bro behavior"
+    ]
+    
+    embed = discord.Embed(
+        title="✨ AURA POINT SCANNER",
+        description=reaction,
+        color=color
+    )
+    embed.add_field(name="📊 Current Aura", value=f"{aura_points:,} points", inline=True)
+    embed.add_field(name="📈 Recent Change", value=f"{'+' if change >= 0 else ''}{change} points", inline=True)
+    embed.add_field(name="🎭 Status", value=status, inline=False)
+    embed.add_field(name="🎯 Recent Activity", value=f"*{random.choice(aura_events)}*", inline=True)
+    embed.add_field(name="💡 Advice", 
+                   value="Keep being iconic! 👑" if aura_points > 0 else "Time for a comeback arc! 📈", 
+                   inline=True)
+    embed.set_footer(text="Aura points tracked by the Sigma Energy Monitoring System")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='main-character-moment', description='Declare someone\'s main character moment 👑')
+@app_commands.describe(user='Who\'s having their main character moment?')
+async def main_character_moment_slash(interaction: discord.Interaction, user: discord.Member = None):
+    target = user or interaction.user
+    
+    mc_moments = [
+        f"✨ MAIN CHARACTER ALERT ✨\n{target.mention} is absolutely SERVING main character energy right now! The spotlight is THEIRS! 🎭",
+        f"🎬 BREAKING: {target.mention} just entered their main character era and we're all just NPCs in their story! 💀",
+        f"👑 {target.mention} really said 'today is MY day' and honestly? We respect the energy! The main character vibes are IMMACULATE! ✨",
+        f"🌟 POV: {target.mention} walks into the room and suddenly everyone else becomes background characters! The aura is ASTRONOMICAL! 📊",
+        f"🎭 MAIN CHARACTER MOMENT DETECTED! {target.mention} is giving protagonist energy and we're here for this character development! 📖",
+        f"✨ {target.mention} just activated main character mode! Everyone else is now supporting cast! The energy is UNMATCHED! 🔥",
+        f"🎪 Step aside everyone, {target.mention} is having their MOMENT! The main character energy is off the CHARTS! 📈",
+        f"👑 CROWNED: {target.mention} as today's Main Character! The throne is theirs and we're all just living in their world! 🌍"
+    ]
+    
+    mc_perks = [
+        "✨ Everything goes their way today",
+        "🎯 All conversations revolve around them",
+        "💫 Plot armor activated",
+        "🎭 Supporting characters appear when needed",
+        "🌟 Aura points automatically maxed",
+        "👑 Sigma energy enhanced by 200%",
+        "🔥 Rizz levels boosted to legendary",
+        "📈 Main character privileges unlocked"
+    ]
+    
+    embed = discord.Embed(
+        title="👑 MAIN CHARACTER MOMENT ACTIVATED",
+        description=random.choice(mc_moments),
+        color=0xFFD700
+    )
+    embed.add_field(name="🎬 Main Character Perks", value=f"• {random.choice(mc_perks)}\n• {random.choice(mc_perks)}\n• {random.choice(mc_perks)}", inline=False)
+    embed.add_field(name="⏰ Duration", value="24 hours (or until someone else takes the spotlight)", inline=True)
+    embed.add_field(name="🎯 Status", value="LEGENDARY PROTAGONIST ENERGY", inline=True)
+    embed.set_footer(text="Main character status officially certified by the Plot Committee")
+    
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='help', description='Show all available goofy commands 🤪')
