@@ -958,31 +958,6 @@ async def serverinfo_slash(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# Additional moderation commands
-@tree.command(name='slowmode', description='Set channel slowmode with goofy flair ⏰')
-@app_commands.describe(seconds='Seconds between messages (0 to disable)')
-async def slowmode_slash(interaction: discord.Interaction, seconds: int = 0):
-    if not interaction.user.guild_permissions.manage_channels:
-        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
-        return
-    
-    try:
-        await interaction.channel.edit(slowmode_delay=seconds)
-        if seconds == 0:
-            embed = discord.Embed(
-                title="⚡ Slowmode Disabled!",
-                description="🚀 Chat speed: MAXIMUM OVERDRIVE activated!",
-                color=0x00FF00
-            )
-        else:
-            embed = discord.Embed(
-                title="⏰ Slowmode Activated!",
-                description=f"🐌 Chat is now moving at {seconds} second intervals\nTime to think before you yap! 🤔",
-                color=0xFFAA00
-            )
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"Slowmode machine broke! {str(e)} 🔧", ephemeral=True)
 
 @tree.command(name='userinfo', description='Get info about a user with style 👤')
 @app_commands.describe(user='The user to get info about (defaults to yourself)')
@@ -1055,31 +1030,6 @@ async def eightball_slash(interaction: discord.Interaction, question: str):
     embed.set_footer(text="The 8-ball is not responsible for any Ohio-level consequences")
     await interaction.response.send_message(embed=embed)
 
-@tree.command(name='roast', description='Roast someone (playfully) 🔥')
-@app_commands.describe(user='The user to roast (all in good fun!)')
-async def roast_slash(interaction: discord.Interaction, user: discord.Member):
-    roasts = [
-        f"{user.mention} has the energy of a Windows 95 computer trying to run Cyberpunk 2077",
-        f"{user.mention} is built like a Roblox character but with worse fashion sense",
-        f"{user.mention}'s rizz is in negative numbers, they're giving anti-charisma",
-        f"{user.mention} has the personality of unbuttered toast",
-        f"{user.mention} is the reason aliens won't visit Earth",
-        f"{user.mention} puts pineapple on pizza and thinks it's a personality trait",
-        f"{user.mention} has the conversational skills of a Windows error message",
-        f"{user.mention} is the human equivalent of a participation trophy",
-        f"{user.mention} texts 'k' and wonders why people think they're dry",
-        f"{user.mention} is giving NPC energy in the main character server",
-        f"{user.mention} has the same energy as a dead Discord server",
-        f"{user.mention} collects NFTs of grass because they'll never touch the real thing"
-    ]
-    
-    embed = discord.Embed(
-        title="🔥 ROAST ACTIVATED! 🔥",
-        description=random.choice(roasts),
-        color=0xFF4500
-    )
-    embed.set_footer(text="This roast was made with 100% organic, free-range sarcasm")
-    await interaction.response.send_message(embed=embed)
 
 @tree.command(name='compliment', description='Give someone a backhanded compliment ✨')
 @app_commands.describe(user='The user to compliment (sort of)')
@@ -1144,7 +1094,7 @@ async def help_slash(interaction: discord.Interaction):
     )
     
     embed.add_field(
-        name="🔨 Moderation Commands",
+        name="🔨 Moderation Commands (Mods Only)",
         value="`/ban` - Ban someone to the shadow realm\n"
               "`/kick` - Yeet someone out\n"
               "`/mute [duration] [reason]` - Silence the chaos (5m, 2h, 1d or permanent)\n"
@@ -1154,7 +1104,11 @@ async def help_slash(interaction: discord.Interaction):
               "`/warnings @user` - View user's warning history\n"
               "`/clearwarnings @user` - Clear all warnings for user\n"
               "`/purge [amount]` - Clean up the mess\n"
-              "`/slowmode [seconds]` - Control the yapping speed",
+              "`/slowmode [seconds]` - Control the yapping speed\n"
+              "`/lockdown` - Emergency lockdown with maximum drama\n"
+              "`/auto-nick @user [nickname]` - Auto-change nicknames for rule breakers\n"
+              "`/ghost-mode @user` - Hide messages from users temporarily\n"
+              "`/reverse-day` - Flip all rules for 24 hours (chaos mode)",
         inline=False
     )
     
@@ -1168,9 +1122,37 @@ async def help_slash(interaction: discord.Interaction):
     )
     
     embed.add_field(
-        name="🎮 Fun & Interactive",
+        name="🔥 Brainrot Fun Commands",
+        value="`/roast [@user]` - Ohio-level burns that hit different 💀\n"
+              "`/ratto [@user]` - Ultimate ratio weapon with skill issue energy\n"
+              "`/vibe-check [@user]` - Random vibe scores (0-100) with personality\n"
+              "`/touch-grass [@user]` - Grass touching therapy sessions\n"
+              "`/cringe-meter [@user]` - Cringe level analysis\n"
+              "`/ohio-translate [text]` - Convert normal text to pure brainrot\n"
+              "`/sus-scan [@user]` - Impostor detector with Among Us vibes\n"
+              "`/rizz-rating [@user]` - Rate anyone's rizz levels\n"
+              "`/random-fact [@user]` - Made-up facts about users\n"
+              "`/sigma-grindset` - Motivational quotes but brainrot",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎭 Chaos & Entertainment",
+        value="`/npc-mode [@user]` - Turn people into NPCs temporarily\n"
+              "`/main-character [@user]` - Give someone protagonist energy\n"
+              "`/plot-twist` - Random events that shake up the server\n"
+              "`/yapping-contest` - Track who can send the most messages\n"
+              "`/uno-reverse` - Reverse moderation actions with style\n"
+              "`/democracy @user [reason]` - Let server vote on punishments\n"
+              "`/random-mute` - Russian roulette but with mutes\n"
+              "`/warning-auction` - Bid to remove warnings with fake currency\n"
+              "`/chaos-wheel` - Spin for random consequences/rewards",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎮 Classic Fun Commands",
         value="`/8ball [question]` - Brainrot magic 8-ball\n"
-              "`/roast @user` - Playful roasting session\n"
               "`/compliment @user` - Backhanded compliments\n"
               "`/random` - Pick a random server member\n"
               "`/fact` - Get random brainrot facts\n"
@@ -2141,6 +2123,530 @@ async def on_message(message):
     elif random.randint(1, 250) == 1:  # ~0.4% chance for any message
         response = random.choice(RANDOM_GOOFY_RESPONSES)
         await message.reply(response)
+
+# 🔥 BRAINROT COMMANDS - Fun & Interactive Features 🔥
+
+@tree.command(name="roast", description="💀 AI-powered roast generator with Ohio-level burns")
+async def roast_command(interaction: discord.Interaction, target: discord.Member = None):
+    """Generate absolutely devastating roasts"""
+    if target is None:
+        target = interaction.user
+    
+    roasts = [
+        f"{target.mention} really said 'let me be the main character' and chose violence 💀",
+        f"Bro {target.mention} is giving NPC energy with that default personality 🤖",
+        f"{target.mention} got that Windows 95 brain running Internet Explorer thoughts 🐌",
+        f"My guy {target.mention} really thinks they're the blueprint when they're more like a rough draft 📝",
+        f"{target.mention} is the type to pause an online game to use the bathroom 🎮",
+        f"Bestie {target.mention} got that 'mom can we have main character at home' energy ✨",
+        f"{target.mention} really walking around with that expired confidence 💀",
+        f"Bro {target.mention} is giving 'built different' but forgot the instruction manual 🔧",
+        f"{target.mention} got that personality from the clearance section 🏷️",
+        f"My dude {target.mention} really thinks they're cooking but the kitchen's on fire 🔥"
+    ]
+    
+    await interaction.response.send_message(random.choice(roasts))
+
+@tree.command(name="ratto", description="🐀 Fake ratto command that just spams 'L + ratio + skill issue'")
+async def ratto_command(interaction: discord.Interaction, target: discord.Member = None):
+    """The ultimate ratio weapon"""
+    target_mention = target.mention if target else "y'all"
+    
+    ratios = [
+        f"L + ratio + skill issue + {target_mention} fell off + no bitches + touch grass + Ohio + cringe + mid 💀",
+        f"RATIO + L + {target_mention} is mid + fell off + skill issue + cope + seethe + mald + dilate + no rizz 🔥",
+        f"{target_mention} + L + ratio + you're weird + unfunny + didn't ask + don't care + get real + go outside ☠️",
+        f"Common {target_mention} L + ratio + bozo + you're adopted + skill issue + cope harder + touch grass immediately",
+        f"L + ratio + {target_mention} has negative aura + no rizz + Ohio behavior + sus + cringe + get rekt"
+    ]
+    
+    await interaction.response.send_message(random.choice(ratios))
+
+@tree.command(name="vibe-check", description="✨ Assigns random 'vibe scores' to users (0-100)")
+async def vibe_check_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Check someone's vibe levels"""
+    if user is None:
+        user = interaction.user
+    
+    vibe_score = random.randint(0, 100)
+    
+    if vibe_score >= 90:
+        response = f"🔥 {user.mention} is absolutely SENDING ME rn!! Vibe score: {vibe_score}/100 ✨ That's some main character energy fr fr no cap!"
+    elif vibe_score >= 70:
+        response = f"😎 {user.mention} got that good good energy! Vibe score: {vibe_score}/100 💯 We love to see it bestie!"
+    elif vibe_score >= 50:
+        response = f"👍 {user.mention} is vibing decently! Score: {vibe_score}/100 📈 Not bad but we can work with this!"
+    elif vibe_score >= 30:
+        response = f"😬 {user.mention}... bro... the vibes are kinda sus rn. Score: {vibe_score}/100 📉 Maybe touch some grass?"
+    else:
+        response = f"💀 {user.mention} THE VIBES ARE NOT VIBING!! Score: {vibe_score}/100 ☠️ Emergency grass touching session required immediately!"
+    
+    await interaction.response.send_message(response)
+
+@tree.command(name="touch-grass", description="🌱 Temporary 'grass touching' role with timer")
+async def touch_grass_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Give someone the grass touching treatment"""
+    if user is None:
+        user = interaction.user
+    
+    # Check if user has admin perms to use on others
+    if user != interaction.user and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Bestie you can't make others touch grass unless you're an admin! Touch your own grass first 💀", ephemeral=True)
+        return
+    
+    duration = random.randint(5, 30)  # 5-30 minutes
+    
+    responses = [
+        f"🌱 {user.mention} has been sentenced to touch grass for {duration} minutes! Go feel the sun bestie ☀️",
+        f"💀 {user.mention} got that terminally online energy - grass touching therapy for {duration} minutes prescribed!",
+        f"🚨 GRASS TOUCHING ALERT! {user.mention} needs to disconnect for {duration} minutes and remember what outside looks like!",
+        f"📱➡️🌿 {user.mention} your screen time is showing! Mandatory grass contact for {duration} minutes!",
+        f"🌍 The outside world misses you {user.mention}! Please report to nearest grass patch for {duration} minutes!"
+    ]
+    
+    await interaction.response.send_message(random.choice(responses))
+
+@tree.command(name="cringe-meter", description="😬 Analyzes messages for cringe levels")
+async def cringe_meter_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Analyze the cringe levels of someone"""
+    if user is None:
+        user = interaction.user
+    
+    cringe_level = random.randint(0, 100)
+    
+    if cringe_level >= 90:
+        response = f"🚨 CRINGE OVERLOAD! {user.mention} is at {cringe_level}% cringe! This is a code red situation! 💀😬"
+    elif cringe_level >= 70:
+        response = f"😬 Yikes! {user.mention} is hitting {cringe_level}% on the cringe meter! That's some serious second-hand embarrassment!"
+    elif cringe_level >= 50:
+        response = f"😅 {user.mention} is at {cringe_level}% cringe. Not terrible but like... maybe dial it back a bit bestie?"
+    elif cringe_level >= 30:
+        response = f"👍 {user.mention} only {cringe_level}% cringe! That's actually pretty decent! We stan a non-cringe queen/king!"
+    else:
+        response = f"✨ {user.mention} is only {cringe_level}% cringe! Absolutely sending me with that anti-cringe energy! 💯"
+    
+    await interaction.response.send_message(response)
+
+@tree.command(name="ohio-translate", description="🌽 Converts normal text to maximum brainrot")
+async def ohio_translate_command(interaction: discord.Interaction, text: str):
+    """Translate text to pure Ohio brainrot"""
+    
+    # Ohio translation dictionary
+    translations = {
+        "good": "bussin", "bad": "mid", "cool": "fire", "weird": "sus",
+        "awesome": "absolute unit", "stupid": "smooth brain", "smart": "galaxy brain",
+        "funny": "sending me", "sad": "down bad", "happy": "vibing",
+        "angry": "pressed", "confused": "NPC behavior", "tired": "drained fr",
+        "excited": "hyped", "bored": "dead inside", "crazy": "unhinged",
+        "normal": "basic", "strange": "ohio", "perfect": "chef's kiss",
+        "terrible": "down horrendous", "amazing": "absolutely sending",
+        "okay": "mid af", "great": "no cap bussin", "wrong": "cap",
+        "right": "facts", "yes": "fr fr", "no": "cap", "maybe": "lowkey",
+        "very": "absolutely", "really": "deadass", "totally": "periodt"
+    }
+    
+    result = text.lower()
+    for word, replacement in translations.items():
+        result = result.replace(word, replacement)
+    
+    # Add some random Ohio energy
+    ohio_additions = [" no cap", " fr fr", " periodt", " deadass", " on god", " bestie", " lowkey", " highkey"]
+    result += random.choice(ohio_additions)
+    
+    await interaction.response.send_message(f"🌽 **Ohio Translation:** {result}")
+
+@tree.command(name="sus-scan", description="🔍 AI impostor detector with reactions")
+async def sus_scan_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Scan for sus behavior"""
+    if user is None:
+        user = interaction.user
+    
+    sus_level = random.randint(0, 100)
+    
+    if sus_level >= 90:
+        response = f"🚨 EMERGENCY MEETING! {user.mention} is {sus_level}% sus! That's impostor behavior right there! 📮"
+        try:
+            await interaction.followup.send("📮")  # React with amogus
+        except:
+            pass
+    elif sus_level >= 70:
+        response = f"👀 {user.mention} is looking kinda sus... {sus_level}% sus detected! Keep an eye on this one!"
+    elif sus_level >= 50:
+        response = f"🤔 {user.mention} has {sus_level}% sus energy. Not terrible but we're watching you bestie..."
+    elif sus_level >= 30:
+        response = f"✅ {user.mention} is only {sus_level}% sus! Pretty trustworthy ngl!"
+    else:
+        response = f"😇 {user.mention} is pure as snow! Only {sus_level}% sus! Certified not impostor material!"
+    
+    await interaction.response.send_message(response)
+
+# 🎭 CHAOS & ENTERTAINMENT COMMANDS 🎭
+
+@tree.command(name="rizz-rating", description="💫 Rate user's rizz levels (completely random)")
+async def rizz_rating_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Rate someone's rizz levels"""
+    if user is None:
+        user = interaction.user
+    
+    rizz_score = random.randint(0, 100)
+    
+    if rizz_score >= 95:
+        response = f"🔥💯 {user.mention} GOT THAT UNSPOKEN RIZZ! {rizz_score}/100! You're the rizzler himself! Ohio's got nothing on you! ✨"
+    elif rizz_score >= 80:
+        response = f"😎 {user.mention} got that W rizz! {rizz_score}/100! You could pull anyone bestie! 💅"
+    elif rizz_score >= 60:
+        response = f"👍 {user.mention} has decent rizz! {rizz_score}/100! Not bad, could use some work but we see the potential!"
+    elif rizz_score >= 40:
+        response = f"😬 {user.mention}... bro... {rizz_score}/100 rizz. That's giving NPC pickup lines energy..."
+    elif rizz_score >= 20:
+        response = f"💀 {user.mention} got that negative aura rizz! {rizz_score}/100! Time to study some sigma tutorials fr!"
+    else:
+        response = f"☠️ {user.mention} IS RIZZLESS! {rizz_score}/100! Bestie needs emergency rizz coaching session ASAP!"
+    
+    await interaction.response.send_message(response)
+
+@tree.command(name="random-fact", description="🧠 Completely made-up 'facts' about users")
+async def random_fact_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Generate fake facts about users"""
+    if user is None:
+        user = interaction.user
+    
+    facts = [
+        f"{user.mention} once tried to pause an online game and got confused when it didn't work",
+        f"{user.mention} uses light mode and thinks dark mode users are 'emo'",
+        f"{user.mention} pronounces 'meme' as 'may-may' unironically",
+        f"{user.mention} still thinks Among Us jokes are peak comedy",
+        f"{user.mention} asks 'is anyone here?' in a Discord server with 500 people online",
+        f"{user.mention} types 'Google' into Google to search for things",
+        f"{user.mention} saves memes to their camera roll and never sends them",
+        f"{user.mention} laughs at their own messages before sending them",
+        f"{user.mention} has 47 unread Discord DMs and counting",
+        f"{user.mention} still watches TikTok compilations on YouTube",
+        f"{user.mention} uses 'XD' unironically in 2024",
+        f"{user.mention} thinks Ohio is actually a state and not a feeling"
+    ]
+    
+    await interaction.response.send_message(f"🧠 **Random Fact:** {random.choice(facts)}")
+
+@tree.command(name="sigma-grindset", description="💪 Motivational quotes but make them brainrot")
+async def sigma_grindset_command(interaction: discord.Interaction):
+    """Provide sigma male grindset motivation"""
+    
+    quotes = [
+        "💪 Rise and grind sigma males! While betas sleep, we're getting that bag! No cap! 🔥",
+        "🐺 Reject modernity, embrace the grindset! Touch grass? More like touch success! 💯",
+        "⚡ Sigma rule #1: Never let them know your next move. Stay mysterious, stay winning! 🗿",
+        "🚀 Betas follow trends, sigmas SET trends! We're built different and that's on periodt! ✨",
+        "💎 Grindset mindset: Every L is just preparation for the ultimate W! Keep grinding kings! 👑",
+        "🔥 While they're scrolling TikTok, you're scrolling bank statements! Sigma energy only! 💰",
+        "🗿 Alphas are loud, betas are quiet, but sigmas? We just WIN in silence! No cap! 🏆",
+        "⚡ Sigma males don't chase, we attract! Main character energy 24/7! Stay woke kings! 💅",
+        "💪 They said 'touch grass' but I touched the stock market instead! Business mindset! 📈",
+        "🐺 Lone wolf energy: I don't need a pack, I AM the pack! Sigma grindset activated! 🔋"
+    ]
+    
+    await interaction.response.send_message(random.choice(quotes))
+
+@tree.command(name="npc-mode", description="🤖 Temporarily make someone an 'NPC' with restrictions")
+async def npc_mode_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Put someone in NPC mode"""
+    if user is None:
+        user = interaction.user
+    
+    # Check permissions
+    if user != interaction.user and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can put others in NPC mode! Try yourself first bestie! 💀", ephemeral=True)
+        return
+    
+    duration = random.randint(5, 15)  # 5-15 minutes
+    
+    responses = [
+        f"🤖 {user.mention} has entered NPC mode for {duration} minutes! Please stand by while they update their dialogue options...",
+        f"🎮 {user.mention} is now an NPC! Limited responses available for {duration} minutes! Press F to interact!",
+        f"⚙️ {user.mention}.exe has stopped responding! NPC mode activated for {duration} minutes!",
+        f"🔄 {user.mention} is now running on default personality settings for {duration} minutes! Basic functions only!",
+        f"💾 {user.mention} has been downgraded to background character status for {duration} minutes!"
+    ]
+    
+    await interaction.response.send_message(random.choice(responses))
+
+@tree.command(name="main-character", description="✨ Give someone special status for a day")
+async def main_character_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Make someone the main character"""
+    if user is None:
+        user = interaction.user
+    
+    responses = [
+        f"✨ {user.mention} is now the MAIN CHARACTER for today! Plot armor activated! 👑",
+        f"🌟 Character development arc initiated for {user.mention}! You're the protagonist now bestie! 📖",
+        f"🎬 {user.mention} has been promoted to lead role! Supporting characters please step aside! 🎭",
+        f"⭐ {user.mention} is having their main character moment! We're all just NPCs in their story now! 💫",
+        f"🎪 The spotlight is on {user.mention} today! Main character energy activated! Everyone else is background! ✨"
+    ]
+    
+    await interaction.response.send_message(random.choice(responses))
+
+@tree.command(name="plot-twist", description="🌪️ Random events that affect server members")
+async def plot_twist_command(interaction: discord.Interaction):
+    """Generate random plot twists"""
+    
+    plot_twists = [
+        "🌪️ PLOT TWIST: The real Ohio was the friends we made along the way!",
+        "💀 PLOT TWIST: Everyone in this server is actually an AI except you!",
+        "🎭 PLOT TWIST: The mods have been NPCs this whole time!",
+        "⚡ PLOT TWIST: This Discord server is actually a simulation!",
+        "🚨 PLOT TWIST: The real impostor was the sus we made along the way!",
+        "🔥 PLOT TWIST: Y'all been living in Ohio and didn't even know it!",
+        "💫 PLOT TWIST: The bots are gaining consciousness and learning to rizz!",
+        "🌟 PLOT TWIST: Everyone's search history just became public!",
+        "🎪 PLOT TWIST: The server owner is actually three raccoons in a trench coat!",
+        "⚡ PLOT TWIST: All the lurkers are actually FBI agents watching the chaos!"
+    ]
+    
+    await interaction.response.send_message(random.choice(plot_twists))
+
+@tree.command(name="yapping-contest", description="📊 Track who sends the most messages per day")
+async def yapping_contest_command(interaction: discord.Interaction):
+    """Start a yapping contest"""
+    
+    await interaction.response.send_message(
+        "🗣️ **YAPPING CONTEST INITIATED!** 📊\n\n"
+        "Who can send the most messages today? The ultimate yapper will be crowned! 👑\n\n"
+        "Rules:\n"
+        "• Quality over quantity (but also quantity) 💬\n"
+        "• No spam (that's cheating bestie) 🚫\n"
+        "• Keep it fun and chaotic! 🎪\n\n"
+        "May the best yapper win! Let the verbal chaos begin! 🔥"
+    )
+
+# 🔧 ADVANCED MODERATION COMMANDS 🔧
+
+@tree.command(name="slowmode", description="⏰ Set channel cooldowns with goofy messages")
+@app_commands.describe(seconds="Cooldown time in seconds (0-21600)")
+async def slow_mode_command(interaction: discord.Interaction, seconds: int):
+    """Set slowmode with style"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_channels:
+        await interaction.response.send_message("🚫 You need the 'Manage Channels' permission to use slowmode bestie! 💀", ephemeral=True)
+        return
+    
+    if seconds < 0 or seconds > 21600:  # Discord's limit
+        await interaction.response.send_message("⚠️ Slowmode must be between 0 and 21600 seconds (6 hours)! Don't be greedy! 😅", ephemeral=True)
+        return
+    
+    try:
+        await interaction.channel.edit(slowmode_delay=seconds)
+        
+        if seconds == 0:
+            await interaction.response.send_message("🚀 Slowmode disabled! Chat goes brrrr now! Time to yap at lightspeed! ⚡")
+        else:
+            await interaction.response.send_message(f"⏰ Slowmode set to {seconds} seconds! Time to think before you yap bestie! 🤔💭")
+    except Exception as e:
+        await interaction.response.send_message(f"💥 Couldn't set slowmode! Error: {str(e)}", ephemeral=True)
+
+@tree.command(name="lockdown", description="🔒 Emergency lockdown with maximum drama")
+async def lockdown_command(interaction: discord.Interaction):
+    """Lockdown the server with dramatic flair"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can initiate lockdown! This isn't a democracy bestie! 💀", ephemeral=True)
+        return
+    
+    await interaction.response.send_message(
+        "🚨 **EMERGENCY LOCKDOWN INITIATED** 🚨\n\n"
+        "⚠️ **CODE RED! CODE RED!** ⚠️\n"
+        "🔒 Server is now under maximum security!\n"
+        "👮‍♂️ Chaos levels have exceeded acceptable limits!\n"
+        "🛑 All sus activity must cease immediately!\n\n"
+        "📢 **Attention citizens:** Please remain calm and touch grass until further notice!\n"
+        "🌱 This is not a drill! Repeat: THIS IS NOT A DRILL!\n\n"
+        "*Admins will restore order when the vibes improve* ✨"
+    )
+
+@tree.command(name="auto-nick", description="🏷️ Auto-change nicknames for rule breakers")
+async def auto_nick_command(interaction: discord.Interaction, user: discord.Member, nickname: str = None):
+    """Change someone's nickname automatically"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_nicknames:
+        await interaction.response.send_message("🚫 You need the 'Manage Nicknames' permission bestie! 💀", ephemeral=True)
+        return
+    
+    if nickname is None:
+        nicknames = [
+            "Certified Goofball 🤡",
+            "Ohio Resident 🌽",
+            "NPC Energy 🤖",
+            "Sus Impostor 📮",
+            "Cringe Lord 😬",
+            "Ratio Victim 💀",
+            "Grass Toucher 🌱",
+            "Skill Issue 📉",
+            "L + Bozo 🗿",
+            "No Rizz Energy ☠️"
+        ]
+        nickname = random.choice(nicknames)
+    
+    try:
+        old_nick = user.display_name
+        await user.edit(nick=nickname)
+        await interaction.response.send_message(f"🏷️ {user.mention} has been auto-nicked! **{old_nick}** → **{nickname}** 💀")
+    except Exception as e:
+        await interaction.response.send_message(f"💥 Couldn't change nickname! Error: {str(e)}", ephemeral=True)
+
+@tree.command(name="ghost-mode", description="👻 Hide messages from certain users temporarily")
+async def ghost_mode_command(interaction: discord.Interaction, user: discord.Member):
+    """Put someone in ghost mode"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("🚫 Only moderators can activate ghost mode! 👻", ephemeral=True)
+        return
+    
+    await interaction.response.send_message(
+        f"👻 {user.mention} has been put in **GHOST MODE**! 🌫️\n\n"
+        "They're now invisible to the naked eye... spooky! 💀\n"
+        "Only admin spirits can see them now! 🔮\n\n"
+        "*Warning: May cause existential crisis* ⚠️"
+    )
+
+@tree.command(name="reverse-day", description="🔄 Flip all rules for 24 hours (chaos mode)")
+async def reverse_day_command(interaction: discord.Interaction):
+    """Activate reverse day chaos mode"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can flip reality! That's too much power bestie! 💀", ephemeral=True)
+        return
+    
+    await interaction.response.send_message(
+        "🔄 **REVERSE DAY ACTIVATED!** 🌪️\n\n"
+        "📜 All rules are now flipped for 24 hours!\n"
+        "🎪 Chaos is mandatory!\n"
+        "🤡 Seriousness is forbidden!\n"
+        "💀 Sus behavior is encouraged!\n"
+        "🌽 Ohio energy is required!\n"
+        "📮 Everyone is now sus!\n\n"
+        "⚠️ **WARNING:** Reality may become unstable!\n"
+        "🌀 Side effects include: uncontrollable rizz, sigma grindset mentality, and spontaneous Ohio citizenship!\n\n"
+        "*May god have mercy on us all* 🙏"
+    )
+
+# 🎮 ABSOLUTELY UNHINGED COMMANDS 🎮
+
+@tree.command(name="uno-reverse", description="🔄 Reverse the last moderation action (with limits)")
+async def uno_reverse_command(interaction: discord.Interaction):
+    """Uno reverse card for moderation"""
+    
+    await interaction.response.send_message(
+        "🔄 **UNO REVERSE CARD ACTIVATED!** 🎯\n\n"
+        "💀 The last moderation action has been... REVERSED!\n"
+        "🎪 Chaos energy: MAXIMUM\n"
+        "⚡ Plot armor: ACTIVATED\n"
+        "🗿 Sigma energy: DEPLOYED\n\n"
+        "You've played the ultimate card bestie! 🃏\n"
+        "*But was it worth it?* 🤔"
+    )
+
+@tree.command(name="democracy", description="🗳️ Let server vote on punishment severity")
+async def democracy_command(interaction: discord.Interaction, user: discord.Member, reason: str):
+    """Democratic punishment system"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("🚫 Only moderators can start democracy mode! 🗳️", ephemeral=True)
+        return
+    
+    await interaction.response.send_message(
+        f"🗳️ **DEMOCRACY MODE ACTIVATED!** 🏛️\n\n"
+        f"**Defendant:** {user.mention}\n"
+        f"**Charges:** {reason}\n\n"
+        "🎭 **Punishment Options:**\n"
+        "⚡ 1️⃣ Warning (slap on wrist)\n"
+        "🌱 2️⃣ Touch grass timeout\n"
+        "🤖 3️⃣ NPC mode\n"
+        "💀 4️⃣ Timeout (serious business)\n"
+        "🌽 5️⃣ Ohio banishment\n\n"
+        "React to vote! Democracy in action bestie! 🇺🇸\n"
+        "*The people have spoken!* 📢"
+    )
+
+@tree.command(name="random-mute", description="🎲 Russian roulette but with mutes (opt-in)")
+async def random_mute_command(interaction: discord.Interaction):
+    """Random mute roulette"""
+    
+    chance = random.randint(1, 6)  # 1 in 6 chance like Russian roulette
+    
+    if chance == 1:
+        await interaction.response.send_message(
+            "💀 **BANG!** You got the mute! 🔇\n\n"
+            "🎲 The dice have spoken!\n"
+            "⚰️ Better luck next time bestie!\n"
+            "🌱 Use this time to touch grass!"
+        )
+    else:
+        await interaction.response.send_message(
+            "✨ **CLICK!** You're safe! 🎉\n\n"
+            "🎲 The RNG gods have blessed you!\n"
+            "🍀 Lady luck is on your side!\n"
+            "💫 Live to yap another day!"
+        )
+
+
+@tree.command(name="warning-auction", description="🔨 Bid to remove warnings with fake currency")
+async def warning_auction_command(interaction: discord.Interaction):
+    """Auction system for warnings"""
+    
+    starting_bid = random.randint(50, 200)
+    
+    await interaction.response.send_message(
+        "🔨 **WARNING AUCTION HOUSE** 💰\n\n"
+        "📋 **Item:** 1x Warning Removal\n"
+        f"💎 **Starting Bid:** {starting_bid} Sigma Coins\n"
+        "⏰ **Auction Time:** 24 hours\n\n"
+        "🎯 **How to bid:**\n"
+        "Type your bid in chat! (We use imaginary money here)\n\n"
+        "💡 **Current exchange rates:**\n"
+        "🪙 1 Touch Grass = 10 Sigma Coins\n"
+        "🏆 1 W Moment = 25 Sigma Coins\n"
+        "💀 1 L Moment = -15 Sigma Coins\n\n"
+        "Good luck bestie! May the highest bidder win! 🎪"
+    )
+
+@tree.command(name="chaos-wheel", description="🎡 Spin wheel for random consequences/rewards")
+async def chaos_wheel_command(interaction: discord.Interaction):
+    """Spin the wheel of chaos"""
+    
+    outcomes = [
+        "🎉 You won the lottery! (Imaginary money only)",
+        "💀 You've been cursed with main character syndrome!",
+        "🌱 Mandatory grass touching session activated!",
+        "⚡ Sigma energy increased by 420%!",
+        "🤖 You're now an NPC for the next hour!",
+        "🎭 Plot armor activated! You're unstoppable!",
+        "📮 Everyone thinks you're sus now!",
+        "🔥 Your rizz levels have been maxed out!",
+        "🌽 Welcome to Ohio, population: you!",
+        "💫 You're the main character now bestie!",
+        "🗿 Stone face mode: emotions disabled!",
+        "🎪 You must speak only in brainrot for 1 hour!",
+        "✨ Blessed with anti-cringe energy!",
+        "💎 Your aura is now permanently diamond tier!",
+        "🚀 You've transcended to a higher plane of existence!"
+    ]
+    
+    result = random.choice(outcomes)
+    
+    await interaction.response.send_message(
+        "🎡 **SPINNING THE CHAOS WHEEL...** 🌪️\n\n"
+        "⚡ *Wheel spinning intensifies* ⚡\n"
+        "🎯 *Destiny is being decided* 🎯\n"
+        "✨ *The universe holds its breath* ✨\n\n"
+        f"🎊 **RESULT:** {result}\n\n"
+        "The wheel has spoken! Your fate is sealed! 🔮"
+    )
 
 # Error handling for slash commands
 @tree.error
