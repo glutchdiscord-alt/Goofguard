@@ -30,6 +30,97 @@ logger = logging.getLogger(__name__)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 WSGIRequestHandler.log_request = lambda self, code='-', size='-': None
 
+# Leveling System Storage (in a real app you'd use a database)
+user_levels = {}
+guild_level_config = {}
+
+def load_user_data():
+    """Load user level data from JSON file"""
+    global user_levels
+    try:
+        if os.path.exists('user_levels.json'):
+            with open('user_levels.json', 'r') as f:
+                user_levels = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load user levels: {e}")
+        user_levels = {}
+
+def save_user_data():
+    """Save user level data to JSON file"""
+    try:
+        with open('user_levels.json', 'w') as f:
+            json.dump(user_levels, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save user levels: {e}")
+
+def load_level_config():
+    """Load leveling system config from JSON file"""
+    global guild_level_config
+    try:
+        if os.path.exists('level_config.json'):
+            with open('level_config.json', 'r') as f:
+                guild_level_config = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load level config: {e}")
+        guild_level_config = {}
+
+def save_level_config():
+    """Save leveling system config to JSON file"""
+    try:
+        with open('level_config.json', 'w') as f:
+            json.dump(guild_level_config, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save level config: {e}")
+
+def get_user_data(guild_id, user_id):
+    """Get user data for leveling system"""
+    guild_key = str(guild_id)
+    user_key = str(user_id)
+    
+    if guild_key not in user_levels:
+        user_levels[guild_key] = {}
+    
+    if user_key not in user_levels[guild_key]:
+        user_levels[guild_key][user_key] = {
+            'xp': 0,
+            'level': 1,
+            'messages': 0,
+            'last_xp_gain': 0
+        }
+    
+    return user_levels[guild_key][user_key]
+
+def calculate_level(xp):
+    """Calculate level from XP (exponential growth)"""
+    return int((xp / 100) ** 0.5) + 1
+
+def xp_for_level(level):
+    """Calculate XP needed for a specific level"""
+    return int(((level - 1) ** 2) * 100)
+
+def add_xp(guild_id, user_id, xp_gain):
+    """Add XP to a user and check for level up"""
+    user_data = get_user_data(guild_id, user_id)
+    
+    # Prevent XP farming (cooldown system)
+    current_time = int(time.time())
+    if current_time - user_data['last_xp_gain'] < 60:  # 1 minute cooldown
+        return None, False
+    
+    user_data['xp'] += xp_gain
+    user_data['messages'] += 1
+    user_data['last_xp_gain'] = current_time
+    
+    old_level = user_data['level']
+    new_level = calculate_level(user_data['xp'])
+    
+    level_up = new_level > old_level
+    user_data['level'] = new_level
+    
+    save_user_data()  # Save after each XP gain
+    
+    return user_data, level_up
+
 # Bot setup with all necessary intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -47,6 +138,9 @@ class GoofyMod(discord.Client):
     async def setup_hook(self):
         """Called when bot is starting up"""
         logger.info(f"🤪 {self.user} is getting ready to be goofy!")
+        # Load leveling data on startup
+        load_user_data()
+        load_level_config()
         self.update_status.start()
         
     async def on_ready(self):
@@ -1934,6 +2028,31 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
+    # Leveling System - Award XP for messages
+    if message.guild and not message.author.bot:
+        guild_id = str(message.guild.id)
+        if guild_id in guild_level_config and guild_level_config[guild_id].get("enabled", False):
+            xp_gain = random.randint(15, 25)  # Random XP between 15-25
+            user_data, leveled_up = add_xp(message.guild.id, message.author.id, xp_gain)
+            
+            if leveled_up and user_data:
+                # Send brainrot level up message
+                level_up_messages = [
+                    f"🔥 YOOO {message.author.mention} just hit **Level {user_data['level']}**! That's some serious sigma grindset energy! 💪",
+                    f"💀 {message.author.mention} leveled up to **Level {user_data['level']}**! Bestie is absolutely SENDING with that XP grind! ✨",
+                    f"⚡ LEVEL UP! {message.author.mention} reached **Level {user_data['level']}**! The Ohio energy is STRONG with this one! 🌽",
+                    f"📈 {message.author.mention} just ascended to **Level {user_data['level']}**! Keep grinding that brainrot energy! 🧠",
+                    f"🎉 AYYYY {message.author.mention} hit **Level {user_data['level']}**! That's what we call main character development! 🎭",
+                    f"🏆 {message.author.mention} leveled up to **Level {user_data['level']}**! Certified yapper status achieved! 💬",
+                    f"🔥 {message.author.mention} is now **Level {user_data['level']}**! The sigma grindset never stops! 💯",
+                    f"⭐ LEVEL UP ALERT! {message.author.mention} reached **Level {user_data['level']}**! That rizz is off the charts! 💫"
+                ]
+                
+                try:
+                    await message.channel.send(random.choice(level_up_messages))
+                except:
+                    pass  # Don't break if we can't send level up message
+    
     # Random goofy responses to certain phrases
     content = message.content.lower()
     
@@ -2447,23 +2566,100 @@ async def slow_mode_command(interaction: discord.Interaction, seconds: int):
 
 @tree.command(name="lockdown", description="🔒 Emergency lockdown with maximum drama")
 async def lockdown_command(interaction: discord.Interaction):
-    """Lockdown the server with dramatic flair"""
+    """ACTUALLY lockdown the server with real restrictions"""
     
     # Check permissions
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("🚫 Only admins can initiate lockdown! This isn't a democracy bestie! 💀", ephemeral=True)
         return
     
-    await interaction.response.send_message(
-        "🚨 **EMERGENCY LOCKDOWN INITIATED** 🚨\n\n"
-        "⚠️ **CODE RED! CODE RED!** ⚠️\n"
-        "🔒 Server is now under maximum security!\n"
-        "👮‍♂️ Chaos levels have exceeded acceptable limits!\n"
-        "🛑 All sus activity must cease immediately!\n\n"
-        "📢 **Attention citizens:** Please remain calm and touch grass until further notice!\n"
-        "🌱 This is not a drill! Repeat: THIS IS NOT A DRILL!\n\n"
-        "*Admins will restore order when the vibes improve* ✨"
-    )
+    await interaction.response.defer()
+    
+    try:
+        guild = interaction.guild
+        locked_channels = 0
+        
+        # Actually lock down all text channels
+        for channel in guild.text_channels:
+            try:
+                # Get @everyone role
+                everyone_role = guild.default_role
+                
+                # Remove send message permission for @everyone
+                await channel.set_permissions(
+                    everyone_role, 
+                    send_messages=False,
+                    add_reactions=False,
+                    create_public_threads=False,
+                    create_private_threads=False,
+                    reason="Emergency lockdown initiated by Goofy Mod 🚨"
+                )
+                locked_channels += 1
+            except Exception as e:
+                continue  # Skip channels we can't modify
+        
+        # Send the dramatic message after actually locking down
+        await interaction.followup.send(
+            f"🚨 **EMERGENCY LOCKDOWN INITIATED** 🚨\n\n"
+            f"⚠️ **CODE RED! CODE RED!** ⚠️\n"
+            f"🔒 **{locked_channels} channels** are now under maximum security!\n"
+            f"👮‍♂️ Chaos levels have exceeded acceptable limits!\n"
+            f"🛑 All sus activity must cease immediately!\n\n"
+            f"📢 **Attention citizens:** Please remain calm and touch grass until further notice!\n"
+            f"🌱 This is not a drill! Repeat: THIS IS NOT A DRILL!\n\n"
+            f"*Use `/unlock` to restore order when the vibes improve* ✨\n\n"
+            f"**Real security measures applied:** Send messages disabled for @everyone in {locked_channels} channels!"
+        )
+        
+    except Exception as e:
+        await interaction.followup.send(f"💥 Lockdown failed! Error: {str(e)}", ephemeral=True)
+
+@tree.command(name="unlock", description="🔓 Lift lockdown and restore server freedom")
+async def unlock_command(interaction: discord.Interaction):
+    """Remove lockdown restrictions"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can lift lockdown! 💀", ephemeral=True)
+        return
+    
+    await interaction.response.defer()
+    
+    try:
+        guild = interaction.guild
+        unlocked_channels = 0
+        
+        # Restore permissions to all text channels
+        for channel in guild.text_channels:
+            try:
+                everyone_role = guild.default_role
+                
+                # Restore default permissions
+                await channel.set_permissions(
+                    everyone_role,
+                    send_messages=None,  # None means use default/inherit
+                    add_reactions=None,
+                    create_public_threads=None,
+                    create_private_threads=None,
+                    reason="Lockdown lifted by Goofy Mod ✨"
+                )
+                unlocked_channels += 1
+            except Exception as e:
+                continue
+        
+        await interaction.followup.send(
+            f"✨ **LOCKDOWN LIFTED!** ✨\n\n"
+            f"🎉 **FREEDOM RESTORED!** 🎉\n"
+            f"🔓 **{unlocked_channels} channels** are now free!\n"
+            f"💬 Everyone can yap again!\n"
+            f"🌟 The vibes have been restored to acceptable levels!\n\n"
+            f"📢 **Citizens:** You may resume your regularly scheduled chaos!\n"
+            f"🎪 Let the brainrot energy flow once more!\n\n"
+            f"**Security status:** Normal chaos levels resumed! 🔥"
+        )
+        
+    except Exception as e:
+        await interaction.followup.send(f"💥 Unlock failed! Error: {str(e)}", ephemeral=True)
 
 @tree.command(name="auto-nick", description="🏷️ Auto-change nicknames for rule breakers")
 async def auto_nick_command(interaction: discord.Interaction, user: discord.Member, nickname: str = None):
@@ -2533,6 +2729,190 @@ async def reverse_day_command(interaction: discord.Interaction):
         "🌀 Side effects include: uncontrollable rizz, sigma grindset mentality, and spontaneous Ohio citizenship!\n\n"
         "*May god have mercy on us all* 🙏"
     )
+
+# 🎮 LEVELING SYSTEM COMMANDS 🎮
+
+@tree.command(name="configlevel", description="⚙️ Configure the brainrot leveling system")
+@app_commands.describe(setting="Enable or disable the leveling system")
+@app_commands.choices(setting=[
+    app_commands.Choice(name="Enable", value="enable"),
+    app_commands.Choice(name="Disable", value="disable")
+])
+async def config_level_command(interaction: discord.Interaction, setting: str):
+    """Configure leveling system with maximum brainrot energy"""
+    
+    # Check permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can configure the sigma grindset system bestie! 💀", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    if setting == "enable":
+        guild_level_config[guild_id] = {"enabled": True}
+        save_level_config()
+        
+        await interaction.response.send_message(
+            "📈 **LEVELING SYSTEM ACTIVATED!** 📈\n\n"
+            "🔥 The sigma grindset has been deployed!\n"
+            "⚡ Users will now gain XP for being active!\n"
+            "🏆 Level up messages will absolutely SEND!\n"
+            "💪 Time to start grinding those levels!\n\n"
+            "📊 **How it works:**\n"
+            "• Send messages to gain XP (1 min cooldown) 💬\n"
+            "• Level up with exponential growth 📈\n"
+            "• Brainrot level-up messages 🎉\n"
+            "• Check progress with `/level` or `/leaderboard` 👑\n\n"
+            "The Ohio energy is now MAXIMUM! Let the grind begin! 💯"
+        )
+        
+    else:
+        guild_level_config[guild_id] = {"enabled": False}
+        save_level_config()
+        
+        await interaction.response.send_message(
+            "📉 **LEVELING SYSTEM DEACTIVATED** 📉\n\n"
+            "💀 The sigma grindset has been paused!\n"
+            "😔 No more level-up notifications!\n"
+            "🚫 XP gains are now disabled!\n\n"
+            "Users can still check their stats, but no new XP will be awarded.\n"
+            "Use `/configlevel enable` to restart the grind! 💪"
+        )
+
+@tree.command(name="level", description="📊 Check your current brainrot level and XP")
+async def level_command(interaction: discord.Interaction, user: discord.Member = None):
+    """Check level with maximum Ohio energy"""
+    
+    target = user or interaction.user
+    if target.bot:
+        await interaction.response.send_message("🤖 Bots don't need to grind levels bestie, they're already at maximum sigma! 💀", ephemeral=True)
+        return
+    
+    user_data = get_user_data(interaction.guild.id, target.id)
+    current_xp = user_data['xp']
+    current_level = user_data['level']
+    messages_sent = user_data['messages']
+    
+    # Calculate XP for next level
+    next_level_xp = xp_for_level(current_level + 1)
+    current_level_xp = xp_for_level(current_level)
+    xp_needed = next_level_xp - current_xp
+    xp_progress = current_xp - current_level_xp
+    xp_for_this_level = next_level_xp - current_level_xp
+    
+    # Progress bar
+    progress_percent = (xp_progress / xp_for_this_level) if xp_for_this_level > 0 else 0
+    bar_length = 20
+    filled_length = int(bar_length * progress_percent)
+    bar = "█" * filled_length + "░" * (bar_length - filled_length)
+    
+    # Level titles based on level ranges
+    if current_level >= 100:
+        title = "🌟 Absolute Ohio Legend"
+        color = 0xFFD700  # Gold
+    elif current_level >= 75:
+        title = "👑 Sigma Grindset Master"
+        color = 0x9400D3  # Purple
+    elif current_level >= 50:
+        title = "🔥 Certified Brainrot Lord"
+        color = 0xFF4500  # Red
+    elif current_level >= 25:
+        title = "⚡ Chaos Energy Wielder"
+        color = 0x00FF00  # Green
+    elif current_level >= 10:
+        title = "🤪 Professional Yapper"
+        color = 0x1E90FF  # Blue
+    else:
+        title = "🌱 Grass Touching Rookie"
+        color = 0x808080  # Gray
+    
+    embed = discord.Embed(
+        title=f"{title}",
+        description=f"**{target.display_name}**'s Sigma Grindset Stats 📊",
+        color=color
+    )
+    
+    embed.add_field(
+        name="📈 Current Level",
+        value=f"**Level {current_level}** ({current_xp:,} XP)",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🎯 Next Level",
+        value=f"Need {xp_needed:,} more XP",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="💬 Messages Sent",
+        value=f"{messages_sent:,} yappers",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="📊 Progress to Next Level",
+        value=f"{bar} {progress_percent*100:.1f}%",
+        inline=False
+    )
+    
+    if target.avatar:
+        embed.set_thumbnail(url=target.avatar.url)
+    
+    embed.set_footer(text="Keep grinding that sigma energy bestie! 💪")
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name="leaderboard", description="🏆 See the top sigma grinders in the server")
+async def leaderboard_command(interaction: discord.Interaction):
+    """Show the top level users with brainrot energy"""
+    
+    guild_id = str(interaction.guild.id)
+    
+    if guild_id not in user_levels or not user_levels[guild_id]:
+        await interaction.response.send_message(
+            "📊 No sigma grinders detected yet! 💀\n\n"
+            "Start sending messages to begin your grindset journey! 💪\n"
+            "(Make sure leveling is enabled with `/configlevel enable`)",
+            ephemeral=True
+        )
+        return
+    
+    # Sort users by XP
+    sorted_users = sorted(
+        user_levels[guild_id].items(), 
+        key=lambda x: x[1]['xp'], 
+        reverse=True
+    )
+    
+    # Get top 10
+    top_users = sorted_users[:10]
+    
+    embed = discord.Embed(
+        title="🏆 SIGMA GRINDSET LEADERBOARD 🏆",
+        description="The most dedicated Ohio energy farmers! 💪",
+        color=0xFFD700
+    )
+    
+    leaderboard_text = ""
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    
+    for i, (user_id, data) in enumerate(top_users):
+        try:
+            user = interaction.guild.get_member(int(user_id))
+            if user:
+                medal = medals[i] if i < len(medals) else f"{i+1}️⃣"
+                leaderboard_text += f"{medal} **{user.display_name}** - Level {data['level']} ({data['xp']:,} XP)\n"
+        except:
+            continue
+    
+    if not leaderboard_text:
+        leaderboard_text = "No active grinders found! Start yapping to join the board! 💬"
+    
+    embed.add_field(name="Top Sigma Grinders", value=leaderboard_text, inline=False)
+    embed.set_footer(text="Keep grinding bestie! Touch grass between sessions! 🌱")
+    
+    await interaction.response.send_message(embed=embed)
 
 # 🎮 ABSOLUTELY UNHINGED COMMANDS 🎮
 
