@@ -16,6 +16,70 @@ from werkzeug.serving import WSGIRequestHandler
 # Load environment variables
 load_dotenv()
 
+# Universal member validation function for hosting compatibility
+async def validate_member(user, guild):
+    """Validate and resolve member object for hosting environments"""
+    if not user or not guild:
+        return None
+    
+    # If it's already a proper member object with the right guild, return it
+    if isinstance(user, discord.Member) and user.guild == guild:
+        return user
+    
+    # Try to get fresh member data from Discord API for hosting environments
+    try:
+        if hasattr(user, 'id'):
+            # First try the cache
+            member = guild.get_member(user.id)
+            if member:
+                return member
+            
+            # If not in cache, fetch from API
+            try:
+                member = await guild.fetch_member(user.id)
+                if member:
+                    return member
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+    except Exception:
+        pass
+    
+    # If user is a User object, try to get the Member version
+    if isinstance(user, discord.User):
+        try:
+            member = guild.get_member(user.id)
+            if member:
+                return member
+            # Try fetching from API
+            member = await guild.fetch_member(user.id)
+            if member:
+                return member
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+    
+    return None
+
+# Non-async version for backwards compatibility
+def validate_member_sync(user, guild):
+    """Synchronous member validation - use validate_member when possible"""
+    if not user or not guild:
+        return None
+    
+    if isinstance(user, discord.Member) and user.guild == guild:
+        return user
+    
+    if hasattr(user, 'id'):
+        member = guild.get_member(user.id)
+        if member:
+            return member
+    
+    if isinstance(user, discord.User):
+        member = guild.get_member(user.id)
+        if member:
+            return member
+    
+    return None
+
 # Configure logging for better hosting monitoring
 logging.basicConfig(
     level=logging.INFO,
@@ -121,12 +185,14 @@ def add_xp(guild_id, user_id, xp_gain):
 
     return user_data, level_up
 
-# Bot setup with all necessary intents
+# Bot setup with enhanced intents for hosting environments
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
 intents.moderation = True
+intents.presences = True  # Help with member caching
+intents.voice_states = True  # Full member info
 
 class GoofyMod(discord.Client):
     def __init__(self):
@@ -646,6 +712,12 @@ RANDOM_GOOFY_RESPONSES = [
     reason='The reason for the ban (default: Being too serious in a goofy server)'
 )
 async def ban_slash(interaction: discord.Interaction, member: discord.Member, reason: str = "Being too serious in a goofy server"):
+    # Validate member for hosting compatibility
+    member = await validate_member(member, interaction.guild)
+    if not member:
+        await interaction.response.send_message("❌ Can't find that user! They might have already yeeted themselves out! 🚪", ephemeral=True)
+        return
+    
     if not interaction.user.guild_permissions.ban_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
@@ -1339,6 +1411,11 @@ async def eightball_slash(interaction: discord.Interaction, question: str):
 @tree.command(name='compliment', description='Give someone a backhanded compliment ✨')
 @app_commands.describe(user='The user to compliment (sort of)')
 async def compliment_slash(interaction: discord.Interaction, user: discord.Member):
+    # Validate member for hosting compatibility
+    user = await validate_member(user, interaction.guild)
+    if not user:
+        await interaction.response.send_message("❌ Couldn't find that user bestie! They might have left or I can't see them! 👻", ephemeral=True)
+        return
     compliments = [
         f"{user.mention} has the confidence of someone who thinks they can sing... and I respect that delusion",
         f"{user.mention} is proof that everyone is unique and special in their own... interesting way",
@@ -5084,21 +5161,41 @@ def run_web_server():
         time.sleep(5)  # Wait before potential restart
 
 def start_bot_with_retry(token, max_retries=3):
-    """Start bot with automatic retry on failure"""
+    """Start bot with automatic retry on failure and enhanced error handling"""
     for attempt in range(max_retries):
         try:
             logger.info(f"🤖 Starting Discord bot (attempt {attempt + 1}/{max_retries})...")
+            
+            # Add connection timeout and enhanced error handling for hosting
             bot.run(token, reconnect=True, log_level=logging.WARNING)
             break  # If we get here, bot ran successfully
+            
         except discord.LoginFailure:
             logger.error("❌ Invalid bot token! Check your DISCORD_TOKEN")
+            logger.error("Make sure your token is correctly set in environment variables")
             exit(1)
+        except discord.HTTPException as e:
+            logger.error(f"Discord HTTP error: {e}")
+            if e.status == 429:  # Rate limited
+                logger.warning("Rate limited, waiting 60 seconds...")
+                time.sleep(60)
+            elif attempt < max_retries - 1:
+                time.sleep(15)
+            else:
+                logger.error("HTTP error, max retries reached")
+                exit(1)
         except discord.ConnectionClosed:
             logger.warning(f"Connection closed, retrying in 10 seconds... (attempt {attempt + 1})")
             if attempt < max_retries - 1:
                 time.sleep(10)
             else:
                 logger.error("Max retries reached, exiting")
+                exit(1)
+        except discord.GatewayNotFound:
+            logger.error("Discord gateway not found - check internet connection")
+            if attempt < max_retries - 1:
+                time.sleep(20)
+            else:
                 exit(1)
         except Exception as e:
             logger.error(f"Bot error (attempt {attempt + 1}): {e}")
@@ -5113,11 +5210,14 @@ def start_bot_with_retry(token, max_retries=3):
 if __name__ == "__main__":
     logger.info("🚀 Initializing Goofy Mod Bot for hosting...")
 
-    # Validate token
-    token = os.getenv('DISCORD_TOKEN')
+    # Validate token with multiple environment variable names for hosting compatibility
+    token = os.getenv('DISCORD_TOKEN') or os.getenv('BOT_TOKEN') or os.getenv('TOKEN') or os.getenv('DISCORD_BOT_TOKEN')
     if not token:
         logger.error("❌ No bot token found! Please set DISCORD_TOKEN in your environment variables!")
+        logger.error("Supported environment variable names: DISCORD_TOKEN, BOT_TOKEN, TOKEN, DISCORD_BOT_TOKEN")
         exit(1)
+    
+    logger.info("✅ Discord token found and loaded successfully!")
 
     logger.info("🚀 Starting Goofy Mod bot with enhanced hosting features...")
 
