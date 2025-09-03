@@ -218,8 +218,125 @@ WELCOME_MESSAGES = [
     "🌪️ Chaos levels increased by 47%! {user} has joined the mayhem! Welcome! 🔥"
 ]
 
-# Simple JSON storage for welcome settings
+# Simple JSON storage for welcome settings and warnings
 WELCOME_CONFIG_FILE = "welcome_config.json"
+WARNINGS_FILE = "warnings.json"
+
+def load_warnings():
+    """Load warnings from JSON file"""
+    try:
+        if os.path.exists(WARNINGS_FILE):
+            with open(WARNINGS_FILE, 'r') as f:
+                return json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Error loading warnings: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error loading warnings: {e}")
+    return {}
+
+def save_warnings(warnings):
+    """Save warnings to JSON file"""
+    try:
+        with open(WARNINGS_FILE, 'w') as f:
+            json.dump(warnings, f, indent=2)
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Error saving warnings: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error saving warnings: {e}")
+
+def add_warning(guild_id, user_id, reason, moderator):
+    """Add a warning to a user and return warning count"""
+    warnings = load_warnings()
+    guild_str = str(guild_id)
+    user_str = str(user_id)
+    
+    if guild_str not in warnings:
+        warnings[guild_str] = {}
+    if user_str not in warnings[guild_str]:
+        warnings[guild_str][user_str] = []
+    
+    warning_data = {
+        'reason': reason,
+        'moderator': str(moderator),
+        'timestamp': time.time()
+    }
+    
+    warnings[guild_str][user_str].append(warning_data)
+    save_warnings(warnings)
+    
+    return len(warnings[guild_str][user_str])
+
+def get_user_warnings(guild_id, user_id):
+    """Get warnings for a specific user"""
+    warnings = load_warnings()
+    guild_str = str(guild_id)
+    user_str = str(user_id)
+    
+    return warnings.get(guild_str, {}).get(user_str, [])
+
+def clear_user_warnings(guild_id, user_id, count=None):
+    """Clear warnings for a user (all or specific count)"""
+    warnings = load_warnings()
+    guild_str = str(guild_id)
+    user_str = str(user_id)
+    
+    if guild_str in warnings and user_str in warnings[guild_str]:
+        if count is None:
+            warnings[guild_str][user_str] = []
+        else:
+            # Remove the most recent warnings
+            warnings[guild_str][user_str] = warnings[guild_str][user_str][:-count]
+        save_warnings(warnings)
+        return True
+    return False
+
+async def handle_warning_escalation(interaction, member, warning_count):
+    """Handle automatic escalation based on warning count"""
+    automod_config = load_welcome_config()
+    guild_id = str(interaction.guild.id)
+    
+    # Check if warning escalation is enabled
+    warning_config = automod_config.get(guild_id, {}).get('automod', {}).get('warnings', {})
+    if not warning_config.get('enabled', False):
+        return
+    
+    max_warnings = warning_config.get('max_warnings', 3)
+    action = warning_config.get('action', 'mute')
+    
+    if warning_count >= max_warnings:
+        escalation_messages = [
+            f"Bro got {warning_count} warnings and thought they were untouchable! 😂",
+            f"That's {warning_count} strikes - you're OUT! ⚾",
+            f"Warning overload detected! Time for the consequences! 🚨",
+            f"{warning_count} warnings?? Your vibes are NOT it chief! 💯",
+            f"Bruh collected warnings like Pokémon cards - gotta punish 'em all! 🃏"
+        ]
+        
+        embed = discord.Embed(
+            title="⚠️ Auto-Escalation Triggered!",
+            description=random.choice(escalation_messages),
+            color=0xFF4500
+        )
+        
+        try:
+            if action == 'mute':
+                mute_duration = discord.utils.utcnow() + timedelta(minutes=30)  # 30 min auto-mute
+                await member.edit(timed_out_until=mute_duration, reason=f"Auto-mute: {warning_count} warnings reached")
+                embed.add_field(name="🎤 Action Taken", value="Muted for 30 minutes", inline=True)
+            elif action == 'kick':
+                await member.kick(reason=f"Auto-kick: {warning_count} warnings reached")
+                embed.add_field(name="🦶 Action Taken", value="Kicked from server", inline=True)
+            elif action == 'ban':
+                await member.ban(reason=f"Auto-ban: {warning_count} warnings reached")
+                embed.add_field(name="🔨 Action Taken", value="Banned from server", inline=True)
+            
+            embed.add_field(name="📈 Warning Count", value=f"{warning_count}/{max_warnings}", inline=True)
+            await interaction.followup.send(embed=embed)
+            
+        except discord.Forbidden:
+            await interaction.followup.send("Tried to auto-escalate but I don't have permission! 😭", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Auto-escalation error: {e}")
 
 def load_welcome_config():
     """Load welcome configuration from JSON file"""
@@ -384,27 +501,71 @@ async def kick_slash(interaction: discord.Interaction, member: discord.Member, r
     except Exception as e:
         await interaction.response.send_message(f"Oopsie doopsie! Error: {str(e)} 🙃", ephemeral=True)
 
-@tree.command(name='mute', description='Mute a member for specified minutes 🤐')
+def parse_duration(duration_str):
+    """Parse duration string like '5m', '2h', '1d' into minutes. Returns None for permanent mute."""
+    if not duration_str or duration_str.lower() in ['perm', 'permanent', 'forever', 'inf', 'infinite']:
+        return None  # Permanent mute
+    
+    duration_str = duration_str.lower().strip()
+    
+    try:
+        if duration_str.endswith('m'):
+            return int(duration_str[:-1])  # minutes
+        elif duration_str.endswith('h'):
+            return int(duration_str[:-1]) * 60  # hours to minutes
+        elif duration_str.endswith('d'):
+            return int(duration_str[:-1]) * 60 * 24  # days to minutes
+        elif duration_str.isdigit():
+            return int(duration_str)  # assume minutes if just number
+        else:
+            return None  # Invalid format = permanent
+    except ValueError:
+        return None  # Invalid format = permanent
+
+@tree.command(name='mute', description='Mute a member (permanent by default) 🤐')
 @app_commands.describe(
     member='The member to mute',
-    duration='Duration in minutes (default: 10)',
+    duration='Duration (5m, 2h, 1d) or leave empty for permanent',
     reason='The reason for the mute (default: Being too loud)'
 )
-async def mute_slash(interaction: discord.Interaction, member: discord.Member, duration: int = 10, reason: str = "Being too loud"):
+async def mute_slash(interaction: discord.Interaction, member: discord.Member, duration: str = "", reason: str = "Being too loud"):
     if not interaction.user.guild_permissions.moderate_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
     
     try:
-        # Convert minutes to timedelta
-        mute_duration = discord.utils.utcnow() + timedelta(minutes=duration)
+        # Parse duration
+        duration_minutes = parse_duration(duration)
+        
+        if duration_minutes is None:
+            # Permanent mute (Discord max timeout is 28 days, so we use that)
+            mute_duration = discord.utils.utcnow() + timedelta(days=28)
+            duration_display = "PERMANENT (until unmuted) ♾️"
+        else:
+            mute_duration = discord.utils.utcnow() + timedelta(minutes=duration_minutes)
+            if duration_minutes >= 1440:  # 1 day or more
+                days = duration_minutes // 1440
+                hours = (duration_minutes % 1440) // 60
+                duration_display = f"{days}d {hours}h" if hours > 0 else f"{days}d"
+            elif duration_minutes >= 60:  # 1 hour or more
+                hours = duration_minutes // 60
+                minutes = duration_minutes % 60
+                duration_display = f"{hours}h {minutes}m" if minutes > 0 else f"{hours}h"
+            else:
+                duration_display = f"{duration_minutes}m"
+        
         await member.edit(timed_out_until=mute_duration, reason=f"Muted by {interaction.user}: {reason}")
         
         response = random.choice(GOOFY_RESPONSES['mute'])
         embed = discord.Embed(
             title="🤐 Shhh! Mute Activated!",
-            description=f"{response}\n\n**Muted:** {member.mention}\n**Duration:** {duration} minutes\n**Reason:** {reason}\n**Moderator:** {interaction.user.mention}",
+            description=f"{response}\n\n**Muted:** {member.mention}\n**Duration:** {duration_display}\n**Reason:** {reason}\n**Moderator:** {interaction.user.mention}",
             color=0x808080
+        )
+        embed.add_field(
+            name="💡 Pro Tip",
+            value="Use formats like `5m`, `2h`, `1d` or leave empty for permanent!",
+            inline=False
         )
         await interaction.response.send_message(embed=embed)
     except discord.Forbidden:
@@ -440,23 +601,57 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, r
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
     
+    # Add warning to database
+    warning_count = add_warning(interaction.guild.id, member.id, reason, interaction.user.id)
+    
     response = random.choice(GOOFY_RESPONSES['warn'])
     embed = discord.Embed(
         title="⚠️ Warning Issued!",
         description=f"{response}\n\n**Warned:** {member.mention}\n**Reason:** {reason}\n**Moderator:** {interaction.user.mention}",
         color=0xFFFF00
     )
+    embed.add_field(
+        name="📈 Warning Count",
+        value=f"{warning_count} warning{'s' if warning_count != 1 else ''}",
+        inline=True
+    )
+    
+    # Add warning level indicator
+    if warning_count == 1:
+        embed.add_field(name="🔥 Status", value="First strike!", inline=True)
+    elif warning_count == 2:
+        embed.add_field(name="🔥 Status", value="Getting spicy! 🌶️", inline=True)
+    elif warning_count >= 3:
+        embed.add_field(name="🔥 Status", value="DANGER ZONE! 🚨", inline=True)
+    
     await interaction.response.send_message(embed=embed)
+    
+    # Check for auto-escalation
+    await handle_warning_escalation(interaction, member, warning_count)
 
-@tree.command(name='unwarn', description='Remove a warning from a member ✨')
+@tree.command(name='unwarn', description='Remove warnings from a member ✨')
 @app_commands.describe(
     member='The member to unwarn',
-    reason='The reason for removing the warning (default: They learned their lesson)'
+    count='Number of warnings to remove (default: 1)',
+    reason='The reason for removing the warnings (default: They learned their lesson)'
 )
-async def unwarn_slash(interaction: discord.Interaction, member: discord.Member, reason: str = "They learned their lesson"):
+async def unwarn_slash(interaction: discord.Interaction, member: discord.Member, count: int = 1, reason: str = "They learned their lesson"):
     if not interaction.user.guild_permissions.kick_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
+    
+    # Get current warnings
+    current_warnings = get_user_warnings(interaction.guild.id, member.id)
+    if not current_warnings:
+        await interaction.response.send_message(f"{member.mention} has no warnings to remove! They're already an angel! 😇", ephemeral=True)
+        return
+    
+    # Remove warnings
+    warnings_to_remove = min(count, len(current_warnings))
+    clear_user_warnings(interaction.guild.id, member.id, warnings_to_remove)
+    
+    # Get new warning count
+    remaining_warnings = len(current_warnings) - warnings_to_remove
     
     unwarn_responses = [
         "✨ Warning yeeted into the void! They're clean now! 🧽",
@@ -471,9 +666,113 @@ async def unwarn_slash(interaction: discord.Interaction, member: discord.Member,
     response = random.choice(unwarn_responses)
     embed = discord.Embed(
         title="✨ Warning Removed!",
-        description=f"{response}\n\n**Unwarned:** {member.mention}\n**Reason:** {reason}\n**Moderator:** {interaction.user.mention}",
+        description=f"{response}\n\n**Unwarned:** {member.mention}\n**Removed:** {warnings_to_remove} warning{'s' if warnings_to_remove != 1 else ''}\n**Remaining:** {remaining_warnings} warning{'s' if remaining_warnings != 1 else ''}\n**Reason:** {reason}\n**Moderator:** {interaction.user.mention}",
         color=0x00FF88
     )
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name='warnings', description='View warnings for a member 📄')
+@app_commands.describe(member='The member to check warnings for')
+async def warnings_slash(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.kick_members:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    warnings = get_user_warnings(interaction.guild.id, member.id)
+    
+    if not warnings:
+        clean_messages = [
+            f"{member.mention} is cleaner than Ohio tap water! No warnings found! 💧",
+            f"{member.mention} has zero warnings - they're giving angel energy! 😇",
+            f"Warning count: 0. {member.mention} is more innocent than a newborn! 👶",
+            f"{member.mention} has no warnings - they're built different! 💯",
+            f"This user is warning-free - absolute chad behavior! 👑"
+        ]
+        await interaction.response.send_message(random.choice(clean_messages), ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title=f"📄 Warning History for {member.display_name}",
+        color=0xFFAA00
+    )
+    
+    embed.add_field(
+        name="📊 Total Warnings",
+        value=f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}",
+        inline=True
+    )
+    
+    # Warning level indicator
+    if len(warnings) == 1:
+        status = "🔥 First offense"
+    elif len(warnings) == 2:
+        status = "🌶️ Getting spicy"
+    elif len(warnings) >= 3:
+        status = "🚨 DANGER ZONE"
+    else:
+        status = "✅ Clean slate"
+    
+    embed.add_field(name="🏷️ Status", value=status, inline=True)
+    
+    # Show recent warnings (last 5)
+    recent_warnings = warnings[-5:]
+    warning_text = ""
+    
+    for i, warning in enumerate(reversed(recent_warnings), 1):
+        timestamp = warning.get('timestamp', time.time())
+        date_str = time.strftime('%Y-%m-%d %H:%M', time.localtime(timestamp))
+        warning_text += f"**{i}.** {warning['reason']}\n*{date_str}*\n\n"
+    
+    if warning_text:
+        embed.add_field(
+            name=f"📋 Recent Warnings (Last {len(recent_warnings)})",
+            value=warning_text[:1024],  # Discord field limit
+            inline=False
+        )
+    
+    if len(warnings) > 5:
+        embed.set_footer(text=f"Showing last 5 of {len(warnings)} total warnings")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(name='clearwarnings', description='Clear all warnings for a member 🧹')
+@app_commands.describe(member='The member to clear warnings for')
+async def clearwarnings_slash(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.kick_members:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    warnings = get_user_warnings(interaction.guild.id, member.id)
+    if not warnings:
+        await interaction.response.send_message(f"{member.mention} already has zero warnings! Can't clear what doesn't exist bestie! 🤷‍♂️", ephemeral=True)
+        return
+    
+    clear_user_warnings(interaction.guild.id, member.id)
+    
+    clear_messages = [
+        f"🧹 Wiped {member.mention}'s slate cleaner than my search history!",
+        f"✨ {member.mention} got the factory reset treatment - all warnings GONE!",
+        f"💨 *POOF* {len(warnings)} warnings vanished into thin air!",
+        f"🎆 Warning database has been YOINKED clean for {member.mention}!",
+        f"🔄 {member.mention} just got a fresh start - warnings = 0!"
+    ]
+    
+    embed = discord.Embed(
+        title="🧹 All Warnings Cleared!",
+        description=random.choice(clear_messages),
+        color=0x00FF00
+    )
+    embed.add_field(
+        name="📊 Warnings Removed",
+        value=f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}",
+        inline=True
+    )
+    embed.add_field(
+        name="👮 Moderator",
+        value=interaction.user.mention,
+        inline=True
+    )
+    
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='purge', description='Delete messages from chat 🧹')
@@ -512,16 +811,27 @@ async def purge_slash(interaction: discord.Interaction, amount: int = 10):
 # Auto-Moderation Commands
 @tree.command(name='automod', description='Configure auto-moderation settings 🤖')
 @app_commands.describe(
-    feature='Auto-mod feature to toggle',
-    enabled='Enable or disable the feature'
+    feature='Auto-mod feature to configure',
+    enabled='Enable or disable the feature',
+    action='Action to take when triggered',
+    max_warnings='Max warnings before auto-action (for warning-based features)'
 )
-@app_commands.choices(feature=[
-    app_commands.Choice(name='Spam Detection', value='spam'),
-    app_commands.Choice(name='Excessive Caps', value='caps'),
-    app_commands.Choice(name='Mass Mentions', value='mentions'),
-    app_commands.Choice(name='Repeated Messages', value='repeat')
-])
-async def automod_slash(interaction: discord.Interaction, feature: str, enabled: bool):
+@app_commands.choices(
+    feature=[
+        app_commands.Choice(name='Spam Detection', value='spam'),
+        app_commands.Choice(name='Excessive Caps', value='caps'),
+        app_commands.Choice(name='Mass Mentions', value='mentions'),
+        app_commands.Choice(name='Repeated Messages', value='repeat'),
+        app_commands.Choice(name='Warning Escalation', value='warnings')
+    ],
+    action=[
+        app_commands.Choice(name='Warn Only', value='warn'),
+        app_commands.Choice(name='Mute (10m)', value='mute'),
+        app_commands.Choice(name='Kick', value='kick'),
+        app_commands.Choice(name='Ban', value='ban')
+    ]
+)
+async def automod_slash(interaction: discord.Interaction, feature: str, enabled: bool, action: str = 'warn', max_warnings: int = 3):
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
@@ -535,14 +845,27 @@ async def automod_slash(interaction: discord.Interaction, feature: str, enabled:
     if 'automod' not in automod_config[guild_id]:
         automod_config[guild_id]['automod'] = {}
     
-    automod_config[guild_id]['automod'][feature] = enabled
+    # Store both enabled status and action
+    automod_config[guild_id]['automod'][feature] = {
+        'enabled': enabled,
+        'action': action,
+        'max_warnings': max_warnings
+    }
     save_welcome_config(automod_config)
     
     feature_names = {
         'spam': 'Spam Detection 📧',
         'caps': 'Excessive Caps 🔠',
         'mentions': 'Mass Mentions 📢',
-        'repeat': 'Repeated Messages 🔁'
+        'repeat': 'Repeated Messages 🔁',
+        'warnings': 'Warning Escalation ⚠️'
+    }
+    
+    action_names = {
+        'warn': 'Warn Only ⚠️',
+        'mute': 'Mute (10m) 🤐',
+        'kick': 'Kick 🦶',
+        'ban': 'Ban 🔨'
     }
     
     status = "enabled" if enabled else "disabled"
@@ -553,9 +876,31 @@ async def automod_slash(interaction: discord.Interaction, feature: str, enabled:
         description=f"**{feature_names[feature]}** is now **{status}**!",
         color=0x00FF00 if enabled else 0xFF0000
     )
+    
+    if enabled:
+        embed.add_field(
+            name="🎯 Action",
+            value=action_names[action],
+            inline=True
+        )
+        if feature == 'warnings':
+            embed.add_field(
+                name="📊 Max Warnings",
+                value=f"{max_warnings} strikes",
+                inline=True
+            )
+        
+    goofy_messages = [
+        "Time to unleash the chaos police! 😈",
+        "Bro thinks they can break rules? Not on my watch! 👀",
+        "About to serve some digital justice with extra salt! 🧂",
+        "Rule breakers getting ratio'd by the bot police! 💯",
+        "Your server's about to be cleaner than Ohio tap water! 💧"
+    ]
+    
     embed.add_field(
         name="🤖 GoofGuard Auto-Mod", 
-        value="I'll handle rule breakers with maximum goofy energy!", 
+        value=random.choice(goofy_messages), 
         inline=False
     )
     await interaction.response.send_message(embed=embed)
