@@ -16,6 +16,200 @@ from werkzeug.serving import WSGIRequestHandler
 # Load environment variables
 load_dotenv()
 
+# 🎫 TICKET SYSTEM INTERACTIVE COMPONENTS 🎫
+
+class TicketReasonSelect(discord.ui.Select):
+    """Dropdown for selecting ticket reason with customizable categories"""
+    def __init__(self, guild_id):
+        self.guild_id = guild_id
+        
+        # Get custom categories or use defaults
+        if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
+            custom_categories = ticket_panel_config[guild_id]['categories']
+            options = []
+            for cat in custom_categories:
+                options.append(discord.SelectOption(
+                    label=cat['label'],
+                    description=cat['description'],
+                    emoji=cat['emoji'],
+                    value=cat['value']
+                ))
+        else:
+            # Default categories
+            options = [
+                discord.SelectOption(
+                    label="General Support",
+                    description="I need help with something general! 🤝",
+                    emoji="💡",
+                    value="general"
+                ),
+                discord.SelectOption(
+                    label="Bug Report", 
+                    description="Something is broken and needs fixing! 🐛",
+                    emoji="🐞",
+                    value="bug"
+                ),
+                discord.SelectOption(
+                    label="Account Issues",
+                    description="Problems with my account or roles! 👤",
+                    emoji="👥",
+                    value="account"
+                ),
+                discord.SelectOption(
+                    label="Server Questions",
+                    description="Questions about the server rules/features! ❓",
+                    emoji="❓",
+                    value="server"
+                ),
+                discord.SelectOption(
+                    label="Report User/Content",
+                    description="Need to report inappropriate behavior! 🚨",
+                    emoji="🚨",
+                    value="report"
+                ),
+                discord.SelectOption(
+                    label="Other",
+                    description="None of the above - custom issue! ✨",
+                    emoji="💫",
+                    value="other"
+                )
+            ]
+        
+        super().__init__(
+            placeholder="What do you need help with? 🤔",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id)
+        
+        if guild_id not in ticket_config:
+            await interaction.response.send_message("❌ Ticket system not enabled! This is some sus behavior... 🤔", ephemeral=True)
+            return
+            
+        config = ticket_config[guild_id]
+        category = interaction.guild.get_channel(config['category'])
+        
+        if not category:
+            await interaction.response.send_message("❌ Ticket category was deleted! Ask an admin to reconfigure! 🗑️", ephemeral=True)
+            return
+        
+        # Get reason description (check for custom categories first)
+        if self.guild_id in ticket_panel_config and 'categories' in ticket_panel_config[self.guild_id]:
+            custom_categories = ticket_panel_config[self.guild_id]['categories']
+            reason_map = {cat['value']: cat['label'] + ' - ' + cat['description'] for cat in custom_categories}
+        else:
+            # Default reason map
+            reason_map = {
+                "general": "General Support - Need help with something!",
+                "bug": "Bug Report - Found a glitch that needs fixing!",
+                "account": "Account Issues - Problems with roles/permissions!",
+                "server": "Server Questions - Need info about rules/features!",
+                "report": "Report User/Content - Reporting inappropriate behavior!",
+                "other": "Other - Custom issue that needs attention!"
+            }
+        
+        reason = reason_map.get(self.values[0], "General Support")
+        
+        # Create ticket channel
+        ticket_name = f"ticket-{interaction.user.name}-{int(time.time())}"
+        
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        # Add staff role if configured
+        if config.get('staff_role'):
+            staff_role = interaction.guild.get_role(config['staff_role'])
+            if staff_role:
+                overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        try:
+            ticket_channel = await category.create_text_channel(
+                name=ticket_name,
+                overwrites=overwrites,
+                reason=f"Support ticket created by {interaction.user}"
+            )
+            
+            # Create welcome message in ticket channel
+            welcome_embed = discord.Embed(
+                title="🎫 SUPPORT TICKET ACTIVATED!",
+                description=f"YO {interaction.user.mention}! Your ticket is absolutely BUSSIN! 🔥\\n\\n"
+                           f"**Reason:** {reason}\\n"
+                           f"**Status:** Staff will be with you ASAP! ⚡\\n\\n"
+                           f"Describe your issue in detail and staff will help you out! ✨",
+                color=0x3498DB
+            )
+            
+            welcome_embed.add_field(
+                name="💡 Pro Tips",
+                value="• Be as detailed as possible about your issue!\\n"
+                      "• Screenshots help staff understand better!\\n"
+                      "• Stay active - we might ask follow-up questions!\\n"
+                      "• Use `/ticket close` when your issue is resolved!",
+                inline=False
+            )
+            
+            welcome_embed.set_footer(text="Support powered by sigma grindset customer service! 💪")
+            
+            await ticket_channel.send(embed=welcome_embed)
+            
+            # Confirmation message to user
+            success_embed = discord.Embed(
+                title="✅ TICKET CREATED SUCCESSFULLY!",
+                description=f"Your ticket has been created! Head over to {ticket_channel.mention} to get help! 🎉\\n\\n"
+                           f"**Reason:** {reason}\\n"
+                           f"Staff have been notified and will assist you shortly! 📢",
+                color=0x00FF00
+            )
+            
+            await interaction.response.send_message(embed=success_embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"💥 Failed to create ticket! Error: {str(e)} 🚨", ephemeral=True)
+
+class TicketPanelView(discord.ui.View):
+    """Interactive ticket creation panel with buttons and dropdowns"""
+    def __init__(self, guild_id):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.add_item(TicketReasonSelect(guild_id))
+        
+        # Get custom button settings or use defaults
+        if guild_id in ticket_panel_config:
+            button_text = ticket_panel_config[guild_id].get('button_text', 'Create Ticket')
+            button_emoji = ticket_panel_config[guild_id].get('button_emoji', '🎫')
+        else:
+            button_text = 'Create Ticket'
+            button_emoji = '🎫'
+        
+        # Update button dynamically
+        self.create_ticket_button.label = button_text
+        self.create_ticket_button.emoji = button_emoji
+
+    @discord.ui.button(
+        label="Create Ticket",
+        style=discord.ButtonStyle.primary,
+        emoji="🎫"
+    )
+    async def create_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # This sends an ephemeral message with the dropdown
+        view = discord.ui.View()
+        view.add_item(TicketReasonSelect(self.guild_id))
+        
+        embed = discord.Embed(
+            title="🎫 CREATE YOUR TICKET",
+            description="Select what type of help you need from the dropdown below! 👇\\n\\n"
+                       "Choose the option that best matches your situation! ✨",
+            color=0x3498DB
+        )
+        
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
 # Universal member validation function for hosting compatibility
 async def validate_member(user, guild):
     """Validate and resolve member object for hosting environments"""
@@ -272,87 +466,247 @@ class GoofyMod(discord.Client):
 
 
     async def on_member_join(self, member):
-        """Handle new member joins with goofy welcome messages"""
+        """Handle new member joins with goofy welcome messages and automatic verification"""
         if member.bot:
             return  # Skip bots
 
+        guild_id = str(member.guild.id)
+        
+        # 🛡️ VERIFICATION SYSTEM - Handle automatic captcha DM first
+        if guild_id in verification_config and verification_config[guild_id]['enabled']:
+            try:
+                # Generate automatic captcha for new member
+                captcha_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=4))
+                
+                # Store pending verification
+                pending_verifications[member.id] = {
+                    'guild_id': member.guild.id,
+                    'captcha_code': captcha_code,
+                    'attempts': 0,
+                    'issued_by': None,  # Automatic system
+                    'auto_generated': True
+                }
+                
+                # Create welcome + captcha embed for DM
+                captcha_embed = discord.Embed(
+                    title="🎉 WELCOME TO THE SERVER! 🎉",
+                    description=f"YO {member.name}! Welcome to **{member.guild.name}**! 🔥\\n\\n"
+                               f"But hold up bestie... we gotta make sure you're human first! 🤖\\n\\n"
+                               f"🔒 **VERIFICATION REQUIRED** 🔒\\n"
+                               f"Complete this captcha to prove you're not a bot!",
+                    color=0x3498DB
+                )
+                
+                captcha_embed.add_field(
+                    name="🔢 Your Captcha Code",
+                    value=f"`{captcha_code}`\\n\\n**TYPE THIS EXACT CODE** (case-sensitive!)\\n"
+                          f"Don't copy-paste - type it manually to prove you're human! 🧠",
+                    inline=False
+                )
+                
+                captcha_embed.add_field(
+                    name="📝 Instructions",
+                    value="• Type the code exactly as shown above\\n"
+                          "• You have 3 attempts to get it right\\n"
+                          "• No copy-pasting allowed (it won't work!)\\n"
+                          "• Reply in this DM with JUST the code",
+                    inline=False
+                )
+                
+                captcha_embed.add_field(
+                    name="❓ Need Help?",
+                    value=f"If you're having trouble, ask a staff member in **{member.guild.name}**!\\n"
+                          f"Make sure your DMs are open to server members! 📬",
+                    inline=False
+                )
+                
+                captcha_embed.set_footer(text="Ohio-grade security keeping the bots out! 🛡️")
+                
+                # Try to send the captcha DM
+                try:
+                    await member.send(embed=captcha_embed)
+                    logger.info(f"🛡️ Sent automatic verification captcha to {member.name} ({member.guild.name})")
+                except discord.Forbidden:
+                    logger.warning(f"Failed to send verification DM to {member.name} - DMs disabled")
+                    # Try to notify them in a channel if possible
+                    verify_channel_id = verification_config[guild_id].get('channel')
+                    if verify_channel_id:
+                        verify_channel = member.guild.get_channel(verify_channel_id)
+                        if verify_channel:
+                            await verify_channel.send(
+                                f"🚨 {member.mention} YOUR DMs ARE CLOSED! 🚨\\n"
+                                f"I couldn't send you a verification code! Please enable DMs and ask a mod for manual verification! 📬",
+                                delete_after=30
+                            )
+                            
+            except Exception as e:
+                logger.error(f"Error sending automatic verification captcha: {e}")
+
+        # 🎪 WELCOME SYSTEM - Handle normal welcome messages
         welcome_config = load_welcome_config()
         guild_config = welcome_config.get(str(member.guild.id), {})
 
-        if not guild_config.get("enabled", False):
-            return  # Welcome messages disabled
+        if guild_config.get("enabled", False):
+            welcome_channel_id = guild_config.get("channel_id")
+            if welcome_channel_id:
+                welcome_channel = member.guild.get_channel(welcome_channel_id)
+                if welcome_channel:
+                    try:
+                        # Handle autorole assignment
+                        if guild_id in autorole_config and autorole_config[guild_id]['roles']:
+                            roles_assigned = []
+                            for role_id in autorole_config[guild_id]['roles']:
+                                role = member.guild.get_role(role_id)
+                                if role and role < member.guild.me.top_role:  # Make sure bot can assign this role
+                                    try:
+                                        await member.add_roles(role, reason="🎭 Autorole assignment - sigma grindset activated!")
+                                        roles_assigned.append(role.mention)
+                                    except discord.Forbidden:
+                                        logger.warning(f"Can't assign role {role.name} to {member.name} - insufficient permissions")
+                                    except Exception as e:
+                                        logger.error(f"Error assigning autorole {role.name}: {e}")
+                            
+                            if roles_assigned:
+                                logger.info(f"🎭 Assigned autoroles to {member.name}: {', '.join([r.replace('@&', '@') for r in roles_assigned])}")
 
-        welcome_channel_id = guild_config.get("channel_id")
-        if not welcome_channel_id:
-            return  # No welcome channel set
+                        # Get custom message or use random default
+                        custom_message = guild_config.get("custom_message")
+                        if custom_message:
+                            message = custom_message.format(user=member.mention, username=member.name, server=member.guild.name)
+                        else:
+                            message = random.choice(WELCOME_MESSAGES).format(user=member.mention)
 
-        welcome_channel = member.guild.get_channel(welcome_channel_id)
-        if not welcome_channel:
-            return  # Channel not found
+                        # Add verification notice to welcome message if verification is enabled
+                        if guild_id in verification_config and verification_config[guild_id]['enabled']:
+                            message += "\\n\\n🔒 **Check your DMs for verification!** You'll need to complete a captcha to access the server! 📬"
 
-        try:
-            # Handle autorole assignment FIRST
-            guild_id = str(member.guild.id)
-            if guild_id in autorole_config and autorole_config[guild_id]['roles']:
-                roles_assigned = []
-                for role_id in autorole_config[guild_id]['roles']:
-                    role = member.guild.get_role(role_id)
-                    if role and role < member.guild.me.top_role:  # Make sure bot can assign this role
-                        try:
-                            await member.add_roles(role, reason="🎭 Autorole assignment - sigma grindset activated!")
-                            roles_assigned.append(role.mention)
-                        except discord.Forbidden:
-                            logger.warning(f"Can't assign role {role.name} to {member.name} - insufficient permissions")
-                        except Exception as e:
-                            logger.error(f"Error assigning autorole {role.name}: {e}")
-                
-                if roles_assigned:
-                    logger.info(f"🎭 Assigned autoroles to {member.name}: {', '.join([r.replace('@&', '@') for r in roles_assigned])}")
+                        embed = discord.Embed(
+                            title="🎉 New Goofy Human Detected! 🎉",
+                            description=message,
+                            color=random.randint(0, 0xFFFFFF)
+                        )
 
-            # Get custom message or use random default
-            custom_message = guild_config.get("custom_message")
-            if custom_message:
-                message = custom_message.format(user=member.mention, username=member.name, server=member.guild.name)
-            else:
-                message = random.choice(WELCOME_MESSAGES).format(user=member.mention)
+                        embed.add_field(
+                            name="📊 Member Count", 
+                            value=f"You're member #{member.guild.member_count}!", 
+                            inline=True
+                        )
+                        embed.add_field(
+                            name="📅 Join Date", 
+                            value=member.joined_at.strftime("%B %d, %Y"), 
+                            inline=True
+                        )
 
-            embed = discord.Embed(
-                title="🎉 New Goofy Human Detected! 🎉",
-                description=message,
-                color=random.randint(0, 0xFFFFFF)
-            )
+                        # Add user avatar if available
+                        if member.avatar:
+                            embed.set_thumbnail(url=member.avatar.url)
 
-            embed.add_field(
-                name="📊 Member Count", 
-                value=f"You're member #{member.guild.member_count}!", 
-                inline=True
-            )
-            embed.add_field(
-                name="📅 Join Date", 
-                value=member.joined_at.strftime("%B %d, %Y"), 
-                inline=True
-            )
+                        # Random footer messages
+                        footers = [
+                            "Welcome to peak brainrot territory!",
+                            "Remember to touch grass occasionally!",
+                            "Your vibes will be checked regularly!",
+                            "Ohio residents get 10% off everything!",
+                            "Sigma grindset officially activated!",
+                            "Prepare for maximum chaos energy!"
+                        ]
+                        embed.set_footer(text=random.choice(footers))
 
-            # Add user avatar if available
-            if member.avatar:
-                embed.set_thumbnail(url=member.avatar.url)
+                        await welcome_channel.send(embed=embed)
+                        logger.info(f"🎪 Welcomed {member.name} to {member.guild.name}")
 
-            # Random footer messages
-            footers = [
-                "Welcome to peak brainrot territory!",
-                "Remember to touch grass occasionally!",
-                "Your vibes will be checked regularly!",
-                "Ohio residents get 10% off everything!",
-                "Sigma grindset officially activated!",
-                "Prepare for maximum chaos energy!"
-            ]
-            embed.set_footer(text=random.choice(footers))
+                    except Exception as e:
+                        logger.error(f"Error sending welcome message: {e}")
 
-            await welcome_channel.send(embed=embed)
-            logger.info(f"🎪 Welcomed {member.name} to {member.guild.name}")
+    async def on_member_remove(self, member):
+        """Handle member leaving with goofy farewell messages"""
+        if member.bot:
+            return  # Skip bots
 
-        except Exception as e:
-            logger.error(f"Error sending welcome message: {e}")
+        guild_id = str(member.guild.id)
+        
+        # 🚪 FAREWELL SYSTEM - Check if leaving messages are enabled  
+        # First check if there's a welcome config (we'll reuse the welcome channel for farewells)
+        welcome_config = load_welcome_config()
+        guild_config = welcome_config.get(str(member.guild.id), {})
+
+        if guild_config.get("enabled", False):
+            farewell_channel_id = guild_config.get("channel_id")
+            if farewell_channel_id:
+                farewell_channel = member.guild.get_channel(farewell_channel_id)
+                if farewell_channel:
+                    try:
+                        # Goofy farewell messages
+                        farewell_messages = [
+                            f"😢 {member.mention} said 'adios' and dipped! We'll miss that chaotic energy! 💔",
+                            f"🚶‍♂️ {member.mention} has left the building! Elvis style but make it sad! 🕺💀", 
+                            f"📤 {member.mention} rage quit! They couldn't handle our sigma energy! 😤",
+                            f"🌅 {member.mention} went off to touch grass! Respect the grindset! 🌱",
+                            f"✈️ {member.mention} flew away like a bird! Fly high bestie! 🕊️",
+                            f"🎭 {member.mention} left to find their main character moment elsewhere! 🌟",
+                            f"📱 {member.mention} logged off from this server! Hope they find good WiFi! 📶",
+                            f"🎪 The circus lost another performer! {member.mention} has left the chat! 🤡",
+                            f"💨 {member.mention} vanished faster than my dad! Poof! Gone! ✨",
+                            f"🚂 {member.mention} took the L train to another server! All aboard! 🚃"
+                        ]
+                        
+                        farewell_message = random.choice(farewell_messages)
+
+                        embed = discord.Embed(
+                            title="😭 Someone Left Our Goofy Paradise! 😭",
+                            description=farewell_message,
+                            color=0xFF6B6B  # Red-ish color for sadness
+                        )
+
+                        embed.add_field(
+                            name="📊 Member Count", 
+                            value=f"We're down to {member.guild.member_count} members! 📉", 
+                            inline=True
+                        )
+                        
+                        # Calculate how long they were here
+                        if member.joined_at:
+                            time_here = discord.utils.utcnow() - member.joined_at
+                            days = time_here.days
+                            if days == 0:
+                                time_str = "Less than a day (speedrun departure! 💨)"
+                            elif days == 1:
+                                time_str = "1 day (didn't even unpack! 📦)"
+                            else:
+                                time_str = f"{days} days (had a good run! ⚡)"
+                            
+                            embed.add_field(
+                                name="⏰ Time With Us", 
+                                value=time_str, 
+                                inline=True
+                            )
+
+                        # Add user avatar if available
+                        if member.avatar:
+                            embed.set_thumbnail(url=member.avatar.url)
+
+                        # Random footer messages for farewells
+                        farewell_footers = [
+                            "Gone but not forgotten... probably! 💭",
+                            "Hope they find what they're looking for! 🌟",
+                            "The door is always open for a comeback! 🚪",
+                            "May their journey be filled with good vibes! ✨",
+                            "We'll keep their chaos energy alive! 🔥",
+                            "Farewell, fellow human of questionable choices! 🤪"
+                        ]
+                        embed.set_footer(text=random.choice(farewell_footers))
+
+                        await farewell_channel.send(embed=embed)
+                        logger.info(f"😢 Farewelled {member.name} from {member.guild.name}")
+
+                        # Clean up any pending verifications for this user
+                        if member.id in pending_verifications:
+                            if pending_verifications[member.id]['guild_id'] == member.guild.id:
+                                del pending_verifications[member.id]
+                                logger.info(f"🧹 Cleaned up pending verification for {member.name}")
+
+                    except Exception as e:
+                        logger.error(f"Error sending farewell message: {e}")
 
 # Initialize bot and command tree
 bot = GoofyMod()
@@ -3840,9 +4194,10 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
 @app_commands.describe(
     action='What to do (setup/disable/status)',
     category='Category channel for tickets',
-    staff_role='Role that can view/manage tickets'
+    staff_role='Role that can view/manage tickets',
+    panel_channel='Channel to send the ticket creation panel'
 )
-async def ticket_system_slash(interaction: discord.Interaction, action: str, category: discord.CategoryChannel = None, staff_role: discord.Role = None):
+async def ticket_system_slash(interaction: discord.Interaction, action: str, category: discord.CategoryChannel = None, staff_role: discord.Role = None, panel_channel: discord.TextChannel = None):
     if not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message("🚫 You need manage channels permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
@@ -3851,30 +4206,78 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
     
     if action.lower() == 'setup':
         if not category:
-            await interaction.response.send_message("❌ You need to specify a category for tickets! Example: `/ticket-system setup \"Support Tickets\" @Staff` 🎫", ephemeral=True)
+            await interaction.response.send_message("❌ You need to specify a category for tickets! Example: `/ticket-system setup \"Support Tickets\" @Staff #tickets` 🎫", ephemeral=True)
+            return
+        
+        if not panel_channel:
+            await interaction.response.send_message("❌ You need to specify a channel for the ticket panel! Example: `/ticket-system setup \"Support Tickets\" @Staff #tickets` 📺", ephemeral=True)
             return
             
         ticket_config[guild_id] = {
             'enabled': True,
             'category': category.id,
-            'staff_role': staff_role.id if staff_role else None
+            'staff_role': staff_role.id if staff_role else None,
+            'panel_channel': panel_channel.id
         }
         
-        embed = discord.Embed(
+        # Send setup confirmation to admin
+        setup_embed = discord.Embed(
             title="🎫 TICKET SYSTEM ACTIVATED!",
             description=f"YOOO! Ticket system is now ABSOLUTELY BUSSIN! 🔥\n\n"
                        f"**Ticket Category:** {category.name}\n"
-                       f"**Staff Role:** {staff_role.mention if staff_role else 'None (All admins)'}\n\n"
-                       "Members can now create support tickets! Customer service but make it BUSSIN! ✨\n"
-                       "Your server just unlocked premium support energy! 🎭",
+                       f"**Staff Role:** {staff_role.mention if staff_role else 'None (All admins)'}\n"
+                       f"**Panel Channel:** {panel_channel.mention}\n\n"
+                       "Members can now create support tickets using the interactive panel! 🎯\n"
+                       "Your server just unlocked premium support energy! 🎭\n\n"
+                       f"🎪 **An interactive ticket panel has been posted in {panel_channel.mention}!**",
             color=0x00FF00
         )
-        embed.add_field(name="🎯 How to use", 
-                       value="• Use `/ticket create` to make a ticket\n• Private channel gets created automatically\n• Staff can help in the private channel\n• Use `/ticket close` when done!", 
-                       inline=False)
-        embed.set_footer(text="Ticket system powered by customer service sigma energy")
+        setup_embed.add_field(
+            name="🎯 New Features", 
+            value="✨ Interactive button panel for easy ticket creation\n🎭 Dropdown menu with different ticket reasons\n🚀 Automatic channel creation with proper permissions\n🔥 Staff notifications and organized support!", 
+            inline=False
+        )
+        setup_embed.set_footer(text="Ticket system powered by sigma grindset customer service")
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=setup_embed)
+        
+        # Get custom panel configuration or use defaults
+        if guild_id in ticket_panel_config:
+            config = ticket_panel_config[guild_id]
+            panel_title = config.get('title', '🎫 SUPPORT TICKET SYSTEM')
+            panel_description = config.get('description', None)
+            panel_color = config.get('color', 0x3498DB)
+        else:
+            panel_title = '🎫 SUPPORT TICKET SYSTEM'
+            panel_description = None
+            panel_color = 0x3498DB
+        
+        # Create and send the interactive ticket panel in the chosen channel
+        if panel_description:
+            # Use custom description
+            panel_embed = discord.Embed(
+                title=panel_title,
+                description=panel_description,
+                color=panel_color
+            )
+        else:
+            # Use default description with categories
+            if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
+                categories_text = "\\n".join([f"{cat['emoji']} **{cat['label']}** - {cat['description']}" for cat in ticket_panel_config[guild_id]['categories']])
+            else:
+                categories_text = ("💡 **General Support** - Questions and general help\\n"
+                                 "🐞 **Bug Reports** - Found something broken? Let us know!\\n"
+                                 "👥 **Account Issues** - Problems with roles or permissions\\n"
+                                 "❓ **Server Questions** - Rules, features, and server info\\n"
+                                 "🚨 **Report User/Content** - Report inappropriate behavior\\n"
+                                 "💫 **Other Issues** - Anything else you need help with!")\n            \n            panel_embed = discord.Embed(
+                title=panel_title,
+                description="**Need help? Create a support ticket!** 🚀\\n\\n"
+                           "Click the button below to start the process! Our staff team is here to help with:\\n\\n"
+                           f"{categories_text}\\n\\n"
+                           "**Your ticket will be private** - only you and staff can see it! 🔒",
+                color=panel_color
+            )\n        \n        panel_embed.add_field(\n            name=\"📝 How it works\",\n            value=\"1️⃣ Click the **Create Ticket** button below\\n\"\n                  \"2️⃣ Select your issue type from the dropdown\\n\"\n                  \"3️⃣ A private channel will be created for you\\n\"\n                  \"4️⃣ Explain your issue and get help from staff!\\n\"\n                  \"5️⃣ Close your ticket when resolved!\",\n            inline=False\n        )\n        \n        panel_embed.add_field(\n            name=\"⚡ Pro Tips\",\n            value=\"• Be specific about your issue for faster help!\\n\"\n                  \"• Include screenshots when helpful!\\n\"\n                  \"• One ticket per issue for better organization!\\n\"\n                  \"• Be patient - staff will respond ASAP!\",\n            inline=False\n        )\n        \n        panel_embed.set_footer(text=\"Customer support that's absolutely BUSSIN! 🔥\")\n        \n        # Create the persistent view with buttons\n        panel_view = TicketPanelView(guild_id)\n        \n        try:\n            await panel_channel.send(embed=panel_embed, view=panel_view)\n        except Exception as e:\n            logger.error(f\"Failed to send ticket panel: {e}\")"
         
     elif action.lower() == 'disable':
         if guild_id in ticket_config:
@@ -3908,7 +4311,328 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
         await interaction.response.send_message(embed=embed)
         
     else:
-        await interaction.response.send_message("❌ Invalid action! Use: setup/disable/status\n\nExample: `/ticket-system setup \"Support\" @Staff` 🎫", ephemeral=True)
+        await interaction.response.send_message("❌ Invalid action! Use: setup/disable/status\n\nExample: `/ticket-system setup \"Support\" @Staff #tickets` 🎫", ephemeral=True)
+
+@tree.command(name='ticket-panel', description='🎨 Customize your ticket panel appearance and settings')
+@app_commands.describe(
+    action='What to customize (title/description/color/button/categories/reset/preview)',
+    value='New value for the setting (hex color for color, text for others)'
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name='Panel Title', value='title'),
+    app_commands.Choice(name='Panel Description', value='description'),
+    app_commands.Choice(name='Panel Color', value='color'),
+    app_commands.Choice(name='Button Text & Emoji', value='button'),
+    app_commands.Choice(name='Manage Categories', value='categories'),
+    app_commands.Choice(name='Reset to Defaults', value='reset'),
+    app_commands.Choice(name='Preview Panel', value='preview')
+])
+async def ticket_panel_slash(interaction: discord.Interaction, action: str, value: str = None):
+    if not interaction.user.guild_permissions.manage_channels:
+        await interaction.response.send_message("🚫 You need manage channels permission to customize ticket panels! Ask an admin bestie! 👮‍♂️", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    # Initialize config if it doesn't exist
+    if guild_id not in ticket_panel_config:
+        ticket_panel_config[guild_id] = {}
+    
+    if action == 'title':
+        if not value:
+            await interaction.response.send_message("❌ Please provide a title! Example: `/ticket-panel title \"🆘 Get Help Here!\"`", ephemeral=True)
+            return
+        
+        ticket_panel_config[guild_id]['title'] = value
+        await interaction.response.send_message(f"✅ Panel title updated to: **{value}**\n\nUse `/ticket-panel preview` to see how it looks! 🎨", ephemeral=True)
+    
+    elif action == 'description':
+        if not value:
+            await interaction.response.send_message("❌ Please provide a description! Example: `/ticket-panel description \"Need assistance? We're here to help!\"`", ephemeral=True)
+            return
+        
+        ticket_panel_config[guild_id]['description'] = value
+        await interaction.response.send_message(f"✅ Panel description updated!\n\nNew description: {value[:100]}{'...' if len(value) > 100 else ''}\n\nUse `/ticket-panel preview` to see the full result! 🎨", ephemeral=True)
+    
+    elif action == 'color':
+        if not value:
+            await interaction.response.send_message("❌ Please provide a hex color! Example: `/ticket-panel color #ff6b6b` or `/ticket-panel color red`", ephemeral=True)
+            return
+        
+        # Parse color value
+        color_int = None
+        if value.lower() in ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink']:
+            color_map = {
+                'red': 0xFF6B6B,
+                'blue': 0x3498DB,
+                'green': 0x2ECC71,
+                'yellow': 0xF39C12,
+                'purple': 0x9B59B6,
+                'orange': 0xE67E22,
+                'pink': 0xFF69B4
+            }
+            color_int = color_map[value.lower()]
+        else:
+            try:
+                if value.startswith('#'):
+                    color_int = int(value[1:], 16)
+                else:
+                    color_int = int(value, 16)
+            except ValueError:
+                await interaction.response.send_message("❌ Invalid color format! Use hex like `#ff6b6b` or color names like `red`, `blue`, `green`, etc.", ephemeral=True)
+                return
+        
+        ticket_panel_config[guild_id]['color'] = color_int
+        
+        # Create color preview embed
+        preview_embed = discord.Embed(
+            title="🎨 Color Updated!",
+            description=f"Panel color set to: **{value}**\n\nThis is how your new color looks! Use `/ticket-panel preview` to see the full panel! ✨",
+            color=color_int
+        )
+        await interaction.response.send_message(embed=preview_embed, ephemeral=True)
+    
+    elif action == 'button':
+        if not value:
+            await interaction.response.send_message("❌ Please provide button text and emoji! Format: `text,emoji`\nExample: `/ticket-panel button \"Get Support,🆘\"`", ephemeral=True)
+            return
+        
+        # Parse button text and emoji
+        parts = value.split(',')
+        if len(parts) != 2:
+            await interaction.response.send_message("❌ Format should be: `text,emoji`\nExample: `/ticket-panel button \"Get Support,🆘\"`", ephemeral=True)
+            return
+        
+        button_text = parts[0].strip().strip('"')
+        button_emoji = parts[1].strip()
+        
+        ticket_panel_config[guild_id]['button_text'] = button_text
+        ticket_panel_config[guild_id]['button_emoji'] = button_emoji
+        
+        await interaction.response.send_message(f"✅ Button updated!\n\n**Text:** {button_text}\n**Emoji:** {button_emoji}\n\nUse `/ticket-panel preview` to see how it looks! 🎨", ephemeral=True)
+    
+    elif action == 'categories':
+        embed = discord.Embed(
+            title="🗂️ Ticket Categories Management",
+            description="To customize ticket categories, use `/ticket-categories` command!\n\n"
+                       "**Available commands:**\n"
+                       "• `/ticket-categories list` - View current categories\n"
+                       "• `/ticket-categories add` - Add new category\n"
+                       "• `/ticket-categories remove` - Remove category\n"
+                       "• `/ticket-categories reset` - Reset to defaults\n\n"
+                       "Categories control the dropdown options users see when creating tickets! 🎯",
+            color=0x3498DB
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    elif action == 'reset':
+        if guild_id in ticket_panel_config:
+            del ticket_panel_config[guild_id]
+        
+        await interaction.response.send_message("🔄 Ticket panel reset to default settings!\n\nAll customizations have been cleared. Your panel will now use the default goofy design! 🎭", ephemeral=True)
+    
+    elif action == 'preview':
+        # Create preview of current panel settings
+        config = ticket_panel_config.get(guild_id, {})
+        
+        title = config.get('title', '🎫 SUPPORT TICKET SYSTEM')
+        description = config.get('description', "**Need help? Create a support ticket!** 🚀\n\nClick the button below to start!")
+        color = config.get('color', 0x3498DB)
+        button_text = config.get('button_text', 'Create Ticket')
+        button_emoji = config.get('button_emoji', '🎫')
+        
+        preview_embed = discord.Embed(
+            title=f"🎨 PANEL PREVIEW: {title}",
+            description=f"{description}\n\n**Button:** {button_emoji} {button_text}",
+            color=color
+        )
+        
+        preview_embed.add_field(
+            name="⚙️ Current Settings",
+            value=f"**Title:** {title}\n"
+                  f"**Color:** #{color:06X}\n"
+                  f"**Button:** {button_emoji} {button_text}\n"
+                  f"**Description:** {'Custom' if 'description' in config else 'Default'}",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=preview_embed, ephemeral=True)
+
+@tree.command(name='ticket-categories', description='🗂️ Manage custom ticket categories for your panel')
+@app_commands.describe(
+    action='What to do (list/add/remove/reset)',
+    label='Category name (for add)',
+    description='Category description (for add)',
+    emoji='Category emoji (for add)',
+    value='Internal value/ID (for add/remove)'
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name='List Categories', value='list'),
+    app_commands.Choice(name='Add Category', value='add'),
+    app_commands.Choice(name='Remove Category', value='remove'),
+    app_commands.Choice(name='Reset to Defaults', value='reset')
+])
+async def ticket_categories_slash(interaction: discord.Interaction, action: str, label: str = None, description: str = None, emoji: str = None, value: str = None):
+    if not interaction.user.guild_permissions.manage_channels:
+        await interaction.response.send_message("🚫 You need manage channels permission to manage ticket categories! Ask an admin bestie! 👮‍♂️", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    if action == 'list':
+        config = ticket_panel_config.get(guild_id, {})
+        
+        if 'categories' in config:
+            categories = config['categories']
+            embed = discord.Embed(
+                title="🗂️ Current Ticket Categories",
+                description="Here are your custom ticket categories:",
+                color=0x3498DB
+            )
+            
+            for i, cat in enumerate(categories, 1):
+                embed.add_field(
+                    name=f"{i}. {cat['emoji']} {cat['label']}",
+                    value=f"**Description:** {cat['description']}\n**Value:** `{cat['value']}`",
+                    inline=False
+                )
+        else:
+            embed = discord.Embed(
+                title="🗂️ Default Ticket Categories",
+                description="You're using the default categories. Here they are:",
+                color=0x95A5A6
+            )
+            
+            default_cats = [
+                {"emoji": "💡", "label": "General Support", "description": "Questions and general help", "value": "general"},
+                {"emoji": "🐞", "label": "Bug Report", "description": "Found something broken", "value": "bug"},
+                {"emoji": "👥", "label": "Account Issues", "description": "Problems with roles/permissions", "value": "account"},
+                {"emoji": "❓", "label": "Server Questions", "description": "Rules, features, server info", "value": "server"},
+                {"emoji": "🚨", "label": "Report User/Content", "description": "Report inappropriate behavior", "value": "report"},
+                {"emoji": "💫", "label": "Other", "description": "Anything else", "value": "other"}
+            ]
+            
+            for i, cat in enumerate(default_cats, 1):
+                embed.add_field(
+                    name=f"{i}. {cat['emoji']} {cat['label']}",
+                    value=f"**Description:** {cat['description']}\n**Value:** `{cat['value']}`",
+                    inline=False
+                )
+        
+        embed.add_field(
+            name="📝 How to customize",
+            value="• `/ticket-categories add` - Add new category\n"
+                  "• `/ticket-categories remove` - Remove category\n"
+                  "• `/ticket-categories reset` - Back to defaults",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    elif action == 'add':
+        if not all([label, description, emoji, value]):
+            await interaction.response.send_message(
+                "❌ Missing required fields!\n\n"
+                "**Format:** `/ticket-categories add \"Support\" \"Need general help\" \"🆘\" \"support\"`\n\n"
+                "**Fields:**\n"
+                "• **label** - Display name (e.g., 'General Support')\n"
+                "• **description** - Help text (e.g., 'Questions and help')\n"
+                "• **emoji** - Category emoji (e.g., '💡')\n"
+                "• **value** - Internal ID (e.g., 'general')",
+                ephemeral=True
+            )
+            return
+        
+        # Initialize config if needed
+        if guild_id not in ticket_panel_config:
+            ticket_panel_config[guild_id] = {}
+        if 'categories' not in ticket_panel_config[guild_id]:
+            # Start with defaults if no custom categories exist
+            ticket_panel_config[guild_id]['categories'] = [
+                {"emoji": "💡", "label": "General Support", "description": "Questions and general help", "value": "general"},
+                {"emoji": "🐞", "label": "Bug Report", "description": "Found something broken", "value": "bug"},
+                {"emoji": "👥", "label": "Account Issues", "description": "Problems with roles/permissions", "value": "account"},
+                {"emoji": "❓", "label": "Server Questions", "description": "Rules, features, server info", "value": "server"},
+                {"emoji": "🚨", "label": "Report User/Content", "description": "Report inappropriate behavior", "value": "report"},
+                {"emoji": "💫", "label": "Other", "description": "Anything else", "value": "other"}
+            ]
+        
+        # Check if value already exists
+        existing_values = [cat['value'] for cat in ticket_panel_config[guild_id]['categories']]
+        if value in existing_values:
+            await interaction.response.send_message(f"❌ A category with value `{value}` already exists! Please use a different value.", ephemeral=True)
+            return
+        
+        # Check category limit (Discord dropdown max is 25)
+        if len(ticket_panel_config[guild_id]['categories']) >= 25:
+            await interaction.response.send_message("❌ Maximum of 25 categories allowed! Remove some categories first.", ephemeral=True)
+            return
+        
+        # Add new category
+        new_category = {
+            "label": label,
+            "description": description,
+            "emoji": emoji,
+            "value": value
+        }
+        
+        ticket_panel_config[guild_id]['categories'].append(new_category)
+        
+        await interaction.response.send_message(
+            f"✅ Category added successfully!\n\n"
+            f"**{emoji} {label}**\n"
+            f"Description: {description}\n"
+            f"Value: `{value}`\n\n"
+            f"Total categories: {len(ticket_panel_config[guild_id]['categories'])}/25\n"
+            f"Redeploy your ticket panel with `/ticket-system setup` to see changes!",
+            ephemeral=True
+        )
+    
+    elif action == 'remove':
+        if not value:
+            await interaction.response.send_message("❌ Please specify the category value to remove!\nExample: `/ticket-categories remove general`", ephemeral=True)
+            return
+        
+        config = ticket_panel_config.get(guild_id, {})
+        if 'categories' not in config:
+            await interaction.response.send_message("❌ No custom categories found! You're using defaults.", ephemeral=True)
+            return
+        
+        # Find and remove the category
+        categories = config['categories']
+        category_to_remove = None
+        
+        for cat in categories:
+            if cat['value'] == value:
+                category_to_remove = cat
+                break
+        
+        if not category_to_remove:
+            await interaction.response.send_message(f"❌ No category found with value `{value}`!\n\nUse `/ticket-categories list` to see available categories.", ephemeral=True)
+            return
+        
+        categories.remove(category_to_remove)
+        
+        await interaction.response.send_message(
+            f"✅ Category removed!\n\n"
+            f"**Removed:** {category_to_remove['emoji']} {category_to_remove['label']}\n"
+            f"Remaining categories: {len(categories)}\n\n"
+            f"Redeploy your ticket panel with `/ticket-system setup` to see changes!",
+            ephemeral=True
+        )
+    
+    elif action == 'reset':
+        if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
+            del ticket_panel_config[guild_id]['categories']
+        
+        await interaction.response.send_message(
+            "🔄 Categories reset to defaults!\n\n"
+            "Your ticket panel will now use the original 6 goofy categories:\n"
+            "💡 General Support, 🐞 Bug Report, 👥 Account Issues,\n"
+            "❓ Server Questions, 🚨 Report User/Content, 💫 Other\n\n"
+            "Redeploy your ticket panel with `/ticket-system setup` to see changes!",
+            ephemeral=True
+        )
 
 @tree.command(name='ticket', description='🎫 Create or manage support tickets')
 @app_commands.describe(
@@ -4326,6 +5050,9 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
 verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
 pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
 
+# Storage for custom ticket panel configurations
+ticket_panel_config = {}  # {guild_id: {'title': str, 'description': str, 'color': int, 'button_text': str, 'button_emoji': str, 'categories': list}}
+
 @tree.command(name='verify-setup', description='🛡️ Setup verification system for server security')
 @app_commands.describe(
     action='What to do (setup/disable)',
@@ -4354,27 +5081,82 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
             'channel': verify_channel.id
         }
         
-        embed = discord.Embed(
+        # Send setup confirmation to admin
+        setup_embed = discord.Embed(
             title="🛡️ VERIFICATION SYSTEM ACTIVATED!",
             description=f"🔒 **MAXIMUM SECURITY MODE ENGAGED!** 🔒\n\n"
                        f"✅ **Verified Role:** {verified_role.mention}\n"
                        f"📺 **Verification Channel:** {verify_channel.mention}\n\n"
                        f"🎯 **How it works:**\n"
-                       f"• New members get stuck in verification limbo\n"
-                       f"• They must complete captcha challenges\n"
+                       f"• New members get automatic captcha DMs\n"
+                       f"• They must complete the challenge to get verified\n"
                        f"• Only sigma energy humans get through\n"
                        f"• Bots and sus users get REJECTED!\n\n"
-                       f"Your server is now **FORTRESS LEVEL SECURE!** 🏰",
+                       f"Your server is now **FORTRESS LEVEL SECURE!** 🏰\n\n"
+                       f"📚 **A verification guide has been posted in {verify_channel.mention}!**",
             color=0x00FF00
         )
-        embed.add_field(
+        setup_embed.add_field(
             name="💡 Pro Tips", 
-            value="• Make sure the verified role can see your server!\n• Set up role hierarchy properly!\n• Use `/captcha @user` for manual challenges!", 
+            value="• Make sure the verified role can see your server!\n• Set up role hierarchy properly!\n• New members will get captcha DMs automatically!", 
             inline=False
         )
-        embed.set_footer(text="Verification powered by Ohio-grade security technology")
+        setup_embed.set_footer(text="Verification powered by Ohio-grade security technology")
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=setup_embed)
+        
+        # Send verification guide embed in the chosen channel
+        guide_embed = discord.Embed(
+            title="🛡️ HOW TO GET VERIFIED - READ THIS FR FR! 🛡️",
+            description="YO NEW MEMBER! Welcome to this absolutely BUSSIN server! 🔥\n\n"
+                       "But hold up bestie... you gotta prove you're not a bot first! 🤖\n\n"
+                       "**HERE'S THE TEA ON VERIFICATION:**",
+            color=0x3498DB
+        )
+        
+        guide_embed.add_field(
+            name="📬 Step 1: Check Your DMs!",
+            value="As soon as you joined, I slid into your DMs with a captcha! 💌\n"
+                  "If you don't see it, check if your DMs are open!",
+            inline=False
+        )
+        
+        guide_embed.add_field(
+            name="🔢 Step 2: Solve the Captcha",
+            value="Type the code EXACTLY as shown in your DMs! 📝\n"
+                  "No cap, it's case-sensitive and copy-paste won't work! 🚫",
+            inline=False
+        )
+        
+        guide_embed.add_field(
+            name="✅ Step 3: Get That Verified Role",
+            value=f"Once verified, you'll get the {verified_role.mention} role! 🎉\n"
+                  "Then you can see all the good stuff in this server! 👀",
+            inline=False
+        )
+        
+        guide_embed.add_field(
+            name="❓ Having Issues?",
+            value="• **No DM?** Make sure your DMs are open to server members!\n"
+                  "• **Code not working?** Type it manually, don't copy-paste!\n"
+                  "• **Still stuck?** Ask a staff member for help! 🆘",
+            inline=False
+        )
+        
+        guide_embed.add_field(
+            name="⚠️ Important Notes",
+            value="• You have 3 attempts to get the code right! 💯\n"
+                  "• This keeps our server safe from bots and raiders! 🛡️\n"
+                  "• Real humans only - no Ohio residents allowed! 💀",
+            inline=False
+        )
+        
+        guide_embed.set_footer(text="Made with 💙 by your friendly neighborhood chaos bot")
+        
+        try:
+            await verify_channel.send(embed=guide_embed)
+        except Exception as e:
+            logger.error(f"Failed to send verification guide: {e}")
         
     elif action.lower() == 'disable':
         if guild_id in verification_config:
@@ -4390,19 +5172,25 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
     else:
         await interaction.response.send_message("❌ Invalid action! Use 'setup' or 'disable' bestie! 🤪", ephemeral=True)
 
-@tree.command(name='captcha', description='🤖 Send captcha challenge to verify users')
+@tree.command(name='captcha', description='🤖 [DEPRECATED] Manual captcha - verification is now automatic!')
 @app_commands.describe(
     user='User to challenge with captcha',
     difficulty='Captcha difficulty (easy/medium/hard)'
 )
 async def captcha_slash(interaction: discord.Interaction, user: discord.Member, difficulty: str = "medium"):
-    if not interaction.user.guild_permissions.moderate_members:
-        await interaction.response.send_message("🚫 You don't have the power to captcha people! Ask a mod bestie! 👮‍♂️", ephemeral=True)
-        return
-    
-    if user.bot:
-        await interaction.response.send_message("💀 That's literally a bot bestie! They don't need captcha, they ARE the captcha! 🤖", ephemeral=True)
-        return
+    # Show deprecation notice
+    await interaction.response.send_message(
+        "⚠️ **COMMAND DEPRECATED!** ⚠️\n\n"
+        "YO BESTIE! This command is OLD NEWS! 📰💀\n\n"
+        "✨ **NEW HOTNESS:** Verification is now **AUTOMATIC!** ✨\n"
+        "• New members get captcha DMs instantly when they join! 📬\n"
+        "• No more manual work for mods! 🎉\n"
+        "• Set up verification with `/verify-setup setup`! 🛡️\n\n"
+        "This command still works but it's giving boomer energy... 👴\n"
+        "**Switch to automatic verification for that sigma grindset!** 💪",
+        ephemeral=True
+    )
+    return
     
     # Generate captcha based on difficulty
     if difficulty.lower() == "easy":
@@ -4610,7 +5398,7 @@ async def verification_status_slash(interaction: discord.Interaction):
             inline=False
         )
     
-    embed.set_footer(text="Use /captcha @user to manually challenge suspicious users")
+    embed.set_footer(text="Verification is now automatic! New members get captcha DMs instantly! ⚡")
     await interaction.response.send_message(embed=embed)
 
 # 📚 TUTORIAL SYSTEM 📚
@@ -4619,6 +5407,7 @@ async def verification_status_slash(interaction: discord.Interaction):
 @app_commands.describe(command='Which moderation feature you want to learn about')
 @app_commands.choices(command=[
     app_commands.Choice(name='Verification System', value='verify'),
+    app_commands.Choice(name='Ticket System', value='tickets'),
     app_commands.Choice(name='Auto-Moderation', value='automod'),
     app_commands.Choice(name='Autorole System', value='autorole'),
     app_commands.Choice(name='Welcome System', value='welcome'),
@@ -4633,16 +5422,16 @@ async def tutorial_slash(interaction: discord.Interaction, command: str):
     
     tutorials = {
         'verify': {
-            'title': '🛡️ Verification System Tutorial',
-            'description': 'Complete guide to setting up server verification with captcha challenges!',
+            'title': '🛡️ Verification System Tutorial (NEW & IMPROVED!)',
+            'description': 'Complete guide to the AUTOMATIC verification system with captcha DMs!',
             'color': 0x00FF00,
             'steps': [
-                "**Step 1: Create Roles**\n• Create a `@Verified` role with full server permissions\n• Create a `@Unverified` role with no permissions (optional)",
-                "**Step 2: Setup Verification**\n• Use `/verify-setup setup @Verified #verification-channel`\n• Make sure the bot can manage the verified role!",
-                "**Step 3: Test the System**\n• Use `/captcha @user medium` to test manual challenges\n• Users complete verification with `/verify [code]`",
-                "**Step 4: Monitor Activity**\n• Use `/verification-status` to check pending verifications\n• Failed attempts are tracked automatically"
+                "**Step 1: Create Roles**\n• Create a `@Verified` role with full server permissions\n• Set up role hierarchy so verified members can see your server",
+                "**Step 2: Setup Automatic System**\n• Use `/verify-setup setup @Verified #verification-channel`\n• This creates a verification guide in the channel AND enables automatic DMs!",
+                "**Step 3: How It Works (AUTOMATIC!)**\n• New members get instant captcha DMs when they join!\n• They solve the captcha by typing the code in the DM\n• No manual commands needed - it's all automated!",
+                "**Step 4: Monitor & Manage**\n• Use `/verification-status` to check pending verifications\n• If members have DMs closed, they'll get notified in the verification channel\n• Failed attempts (3 max) are tracked automatically"
             ],
-            'tips': '💡 **Pro Tips:**\n• Set channel permissions so unverified users can only see verification channel\n• Use difficulty levels: easy (numbers), medium (mixed), hard (complex)\n• The system automatically assigns roles on successful verification!'
+            'tips': '🔥 **NEW FEATURES:**\n• AUTOMATIC captcha DMs - no more manual `/captcha` commands!\n• Verification guide posted in your chosen channel\n• Smart fallback for users with closed DMs\n• Gen Z vibes with Ohio-grade security! 💀'
         },
         'automod': {
             'title': '🤖 Auto-Moderation Tutorial',
@@ -4746,6 +5535,18 @@ async def tutorial_slash(interaction: discord.Interaction, command: str):
                 "**Step 3: Restore Visibility**\n• Ghost mode can be lifted manually\n• Use for temporary cooling-off periods\n• Good middle ground between warning and muting"
             ],
             'tips': '💡 **Pro Tips:**\n• Great for heated arguments or minor disruptions\n• Less punitive than mutes but still effective\n• Explain to the user why they\'re in ghost mode!'
+        },
+        'tickets': {
+            'title': '🎫 Support Ticket System Tutorial (FULLY CUSTOMIZABLE!)',
+            'description': 'Create an amazing support system with interactive panels, custom categories, and complete customization!',
+            'color': 0x3498DB,
+            'steps': [
+                "**Step 1: Basic Setup**\n• Create a category channel (e.g., 'Support Tickets')\n• Create staff role for ticket access (recommended)\n• Use `/ticket-system setup 'Support Category' @Staff #tickets-channel`",
+                "**Step 2: Customize Your Panel**\n• `/ticket-panel title` - Change panel title\n• `/ticket-panel description` - Custom description\n• `/ticket-panel color #ff6b6b` - Set custom colors\n• `/ticket-panel button 'Get Help,🆘'` - Custom button text & emoji",
+                "**Step 3: Manage Categories**\n• `/ticket-categories list` - View current categories\n• `/ticket-categories add` - Add custom categories (up to 25!)\n• `/ticket-categories remove` - Remove categories\n• Create categories that fit your server's needs!",
+                "**Step 4: Deploy & Test**\n• `/ticket-panel preview` - Preview your customizations\n• Redeploy panel with `/ticket-system setup` after changes\n• Test with different users to ensure everything works!"
+            ],
+            'tips': '🎨 **FULL CUSTOMIZATION:**\n• 🎨 Custom colors, titles, descriptions, and buttons\n• 📋 Unlimited category types (25 max per Discord limits)\n• 🔄 Easy reset to defaults anytime\n• 🎉 Perfect for any server type - gaming, business, community!'
         }
     }
     
