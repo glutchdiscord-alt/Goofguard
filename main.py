@@ -1199,7 +1199,8 @@ async def help_slash(interaction: discord.Interaction):
               "`/clearwarnings @user` - Clear all warnings for user\n"
               "`/purge [amount]` - Clean up the mess\n"
               "`/slowmode [seconds]` - Control the yapping speed\n"
-              "`/lockdown` - Emergency lockdown with maximum drama\n"
+              "`/lockdown` - Emergency lockdown with REAL security restrictions\n"
+              "`/unlock` - Lift lockdown and restore server freedom\n"
               "`/auto-nick @user [nickname]` - Auto-change nicknames for rule breakers\n"
               "`/ghost-mode @user` - Hide messages from users temporarily\n"
               "`/reverse-day` - Flip all rules for 24 hours (chaos mode)",
@@ -1212,6 +1213,17 @@ async def help_slash(interaction: discord.Interaction):
               "• **Features:** Spam, Caps, Mentions, Repeat Messages, Warning Escalation\n" 
               "• **Actions:** Warn, Mute, Kick, Ban\n"
               "`/automodstatus` - Check auto-mod settings",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📈 Leveling System (Sigma Grindset)",
+        value="`/configlevel [enable/disable]` - Configure leveling system (admins only)\n"
+              "`/level [@user]` - Check your brainrot level and XP progress\n"
+              "`/leaderboard` - See top sigma grinders in the server\n\n"
+              "🔥 **How it works:** Send messages to gain XP and level up!\n"
+              "⚡ **Cooldown:** 1 minute between XP gains to prevent farming\n"
+              "🏆 **Titles:** From Grass Touching Rookie to Absolute Ohio Legend!",
         inline=False
     )
     
