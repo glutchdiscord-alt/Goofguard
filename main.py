@@ -225,6 +225,24 @@ class GoofyMod(discord.Client):
             return  # Channel not found
 
         try:
+            # Handle autorole assignment FIRST
+            guild_id = str(member.guild.id)
+            if guild_id in autorole_config and autorole_config[guild_id]['roles']:
+                roles_assigned = []
+                for role_id in autorole_config[guild_id]['roles']:
+                    role = member.guild.get_role(role_id)
+                    if role and role < member.guild.me.top_role:  # Make sure bot can assign this role
+                        try:
+                            await member.add_roles(role, reason="🎭 Autorole assignment - sigma grindset activated!")
+                            roles_assigned.append(role.mention)
+                        except discord.Forbidden:
+                            logger.warning(f"Can't assign role {role.name} to {member.name} - insufficient permissions")
+                        except Exception as e:
+                            logger.error(f"Error assigning autorole {role.name}: {e}")
+                
+                if roles_assigned:
+                    logger.info(f"🎭 Assigned autoroles to {member.name}: {', '.join([r.replace('@&', '@') for r in roles_assigned])}")
+
             # Get custom message or use random default
             custom_message = guild_config.get("custom_message")
             if custom_message:
@@ -991,7 +1009,13 @@ async def purge_slash(interaction: discord.Interaction, amount: int = 10):
         app_commands.Choice(name='Excessive Caps', value='caps'),
         app_commands.Choice(name='Mass Mentions', value='mentions'),
         app_commands.Choice(name='Repeated Messages', value='repeat'),
-        app_commands.Choice(name='Warning Escalation', value='warnings')
+        app_commands.Choice(name='Warning Escalation', value='warnings'),
+        app_commands.Choice(name='Link Filter', value='links'),
+        app_commands.Choice(name='Invite Blocker', value='invites'),
+        app_commands.Choice(name='NSFW Detection', value='nsfw'),
+        app_commands.Choice(name='File Scanner', value='files'),
+        app_commands.Choice(name='External Emoji Block', value='emojis'),
+        app_commands.Choice(name='Duplicate Messages', value='duplicates')
     ],
     action=[
         app_commands.Choice(name='Warn Only', value='warn'),
@@ -1027,7 +1051,13 @@ async def automod_slash(interaction: discord.Interaction, feature: str, enabled:
         'caps': 'Excessive Caps 🔠',
         'mentions': 'Mass Mentions 📢',
         'repeat': 'Repeated Messages 🔁',
-        'warnings': 'Warning Escalation ⚠️'
+        'warnings': 'Warning Escalation ⚠️',
+        'links': 'Link Filter 🔗',
+        'invites': 'Invite Blocker 📮',
+        'nsfw': 'NSFW Detection 🔞',
+        'files': 'File Scanner 📁',
+        'emojis': 'External Emoji Block 😀',
+        'duplicates': 'Duplicate Messages 📋'
     }
 
     action_names = {
@@ -1090,7 +1120,14 @@ async def automodstatus_slash(interaction: discord.Interaction):
         'spam': 'Spam Detection 📧',
         'caps': 'Excessive Caps 🔠',
         'mentions': 'Mass Mentions 📢',
-        'repeat': 'Repeated Messages 🔁'
+        'repeat': 'Repeated Messages 🔁',
+        'warnings': 'Warning Escalation ⚠️',
+        'links': 'Link Filter 🔗',
+        'invites': 'Invite Blocker 📮',
+        'nsfw': 'NSFW Detection 🔞',
+        'files': 'File Scanner 📁',
+        'emojis': 'External Emoji Block 😀',
+        'duplicates': 'Duplicate Messages 📋'
     }
 
     for key, name in features.items():
@@ -1858,14 +1895,19 @@ async def help_slash(interaction: discord.Interaction):
               "`/unlock` - Lift lockdown and restore server freedom\n"
               "`/auto-nick @user [nickname]` - Auto-change nicknames for rule breakers\n"
               "`/ghost-mode @user` - Hide messages from users temporarily\n"
-              "`/reverse-day` - Flip all rules for 24 hours (chaos mode)",
+              "`/reverse-day` - Flip all rules for 24 hours (chaos mode)\n"
+              "`/roleadd @role @user [reason]` - Give someone a role with sigma energy 🎭\n"
+              "`/massaddrole @role [exclude_bots] [reason]` - Give EVERYONE a role (CHAOS MODE) ⚠️\n"
+              "`/massdm @role [message] [exclude_bots]` - Send DMs to everyone with a role 📬",
         inline=False
     )
 
     embed.add_field(
-        name="🤖 Auto-Moderation",
+        name="🤖 Auto-Moderation & Content Protection",
         value="`/automod [feature] [enabled] [action] [max_warnings]` - Configure auto-mod with actions\n"
-              "• **Features:** Spam, Caps, Mentions, Repeat Messages, Warning Escalation\n" 
+              "• **Basic:** Spam, Caps, Mentions, Repeat Messages, Warning Escalation\n"
+              "• **Content:** Link Filter, Invite Blocker, NSFW Detection, File Scanner\n"
+              "• **Advanced:** External Emoji Block, Duplicate Messages\n"
               "• **Actions:** Warn, Mute, Kick, Ban\n"
               "`/automodstatus` - Check auto-mod settings",
         inline=False
@@ -1937,10 +1979,11 @@ async def help_slash(interaction: discord.Interaction):
     )
 
     embed.add_field(
-        name="ℹ️ Info Commands",
+        name="ℹ️ Info & Help Commands",
         value="`/serverinfo` - Server stats with style\n"
               "`/userinfo [@user]` - User profile with flair\n"
-              "`/help` - This chaotic help message",
+              "`/help` - This chaotic help message\n"
+              "`/tutorial [command]` - Detailed setup guides for moderation features 📚",
         inline=False
     )
 
@@ -1950,7 +1993,19 @@ async def help_slash(interaction: discord.Interaction):
               "`/configwelcomemessage [message]` - Custom message\n"
               "`/togglewelcome` - Enable/disable welcomes\n"
               "`/welcomestatus` - Check configuration\n"
-              "`/resetwelcome` - Reset to defaults",
+              "`/resetwelcome` - Reset to defaults\n"
+              "`/autorole [setup/add/remove/list/disable] @role` - Auto-assign roles to new members 🎭",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛡️ Verification & Security",
+        value="`/verify-setup [setup/disable] @role #channel` - Setup verification system for max security 🔒\n"
+              "`/captcha @user [difficulty]` - Send captcha challenge to verify humans 🤖\n"
+              "`/verify [code]` - Complete verification with your captcha code ✅\n"
+              "`/verification-status` - Check system status and pending verifications 📋\n\n"
+              "🎯 **How it works:** New members get captcha challenges to prove they're human!\n"
+              "🔥 **Difficulty levels:** Easy (3 digits), Medium (4 chars), Hard (6 chars)",
         inline=False
     )
 
@@ -3907,6 +3962,749 @@ async def reverse_day_command(interaction: discord.Interaction):
         "*May god have mercy on us all* 🙏"
     )
 
+# 🎭 ROLE MANAGEMENT COMMANDS 🎭
+
+@tree.command(name='roleadd', description='🎭 Give a role to someone with maximum sigma energy')
+@app_commands.describe(
+    role='The role to give',
+    user='The user to receive the role',
+    reason='Why they deserve this role (optional)'
+)
+async def roleadd_slash(interaction: discord.Interaction, role: discord.Role, user: discord.Member, reason: str = "Main character energy detected"):
+    if not interaction.user.guild_permissions.manage_roles:
+        await interaction.response.send_message("🚫 Lil bro needs manage roles permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
+        return
+    
+    if role >= interaction.user.top_role and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("💀 You can't give roles higher than your own! That's not how the hierarchy works bestie! 📊", ephemeral=True)
+        return
+    
+    if role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("🤖 I can't assign that role! It's higher than mine in the pecking order! Promote me first bestie! 📈", ephemeral=True)
+        return
+
+    if role in user.roles:
+        await interaction.response.send_message(f"💀 {user.mention} already has {role.mention}! They're already that iconic bestie! ✨", ephemeral=True)
+        return
+
+    try:
+        await user.add_roles(role, reason=f"Role added by {interaction.user}: {reason}")
+        
+        goofy_responses = [
+            f"YOOO! {user.mention} just got blessed with {role.mention}! 🎉",
+            f"✨ ROLE UPGRADE! {user.mention} is now serving {role.mention} energy! 💅",
+            f"🔥 BESTIE JUST GOT PROMOTED! {user.mention} → {role.mention}! That's giving main character vibes! 👑",
+            f"🎭 ROLE ASSIGNMENT SUCCESSFUL! {user.mention} is now {role.mention}! Welcome to the club bestie! 🎪",
+            f"⚡ SIGMA GRINDSET ACTIVATED! {user.mention} earned {role.mention}! No cap! 🧢",
+            f"💀 {user.mention} really said 'give me {role.mention}' and honestly? We respect the audacity! 🗿",
+            f"🌟 GLOW UP ALERT! {user.mention} just became {role.mention}! That aura is IMMACULATE! ✨",
+            f"🎪 THE CIRCUS IS EXPANDING! Welcome {role.mention} {user.mention}! Hope you brought snacks! 🍿"
+        ]
+        
+        embed = discord.Embed(
+            title="🎭 ROLE ASSIGNMENT COMPLETE!",
+            description=f"{random.choice(goofy_responses)}\n\n**User:** {user.mention}\n**Role:** {role.mention}\n**Reason:** {reason}\n**Assigned by:** {interaction.user.mention}",
+            color=role.color if role.color != discord.Color.default() else 0x00FF00
+        )
+        embed.add_field(
+            name="💡 Pro Tip", 
+            value="With great power comes great responsibility... or something like that! 🕷️", 
+            inline=False
+        )
+        embed.set_footer(text="Role assignment powered by sigma grindset technology")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message("🚫 I don't have permission to give that role! My powers are limited bestie! 😅", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"💥 Role assignment machine broke! Error: {str(e)} 🤪", ephemeral=True)
+
+@tree.command(name='massaddrole', description='🎪 Give everyone in the server a role - ABSOLUTE CHAOS MODE')
+@app_commands.describe(
+    role='The role to give to EVERYONE (use with caution)',
+    exclude_bots='Exclude bots from mass role assignment (recommended)',
+    reason='Why everyone deserves this role'
+)
+async def massaddrole_slash(interaction: discord.Interaction, role: discord.Role, exclude_bots: bool = True, reason: str = "Mass sigma grindset activation"):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can cause this level of chaos! That's too much power for mortals! 💀", ephemeral=True)
+        return
+    
+    if role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("🤖 I can't assign that role! It's higher than mine! Promote me to Supreme Overlord first! 👑", ephemeral=True)
+        return
+
+    # Safety check - confirm the chaos they're about to unleash
+    member_count = len([m for m in interaction.guild.members if not (m.bot and exclude_bots) and role not in m.roles])
+    
+    if member_count == 0:
+        await interaction.response.send_message(f"💀 Everyone already has {role.mention}! The chaos has already been unleashed bestie! 🎪", ephemeral=True)
+        return
+    
+    # Send confirmation message
+    chaos_warnings = [
+        f"⚠️ **CHAOS WARNING!** ⚠️\n\nYou're about to give {role.mention} to **{member_count}** members!\n\nThis will cause MAXIMUM CHAOS and cannot be undone easily!",
+        f"🌪️ **ABSOLUTE MADNESS INCOMING!** 🌪️\n\n{member_count} people are about to receive {role.mention}!\n\nYour server will never be the same bestie!",
+        f"💀 **POINT OF NO RETURN!** 💀\n\nYou're giving {role.mention} to {member_count} members!\n\nThis is your last chance to reconsider the chaos!"
+    ]
+    
+    embed = discord.Embed(
+        title="🎪 MASS ROLE ASSIGNMENT INITIATED!",
+        description=f"{random.choice(chaos_warnings)}\n\n**Role:** {role.mention}\n**Target Count:** {member_count} members\n**Exclude Bots:** {'Yes' if exclude_bots else 'No'}\n**Reason:** {reason}",
+        color=0xFF4500
+    )
+    embed.add_field(
+        name="⚡ CHAOS METER", 
+        value="██████████ 100% 🔥", 
+        inline=False
+    )
+    embed.set_footer(text="Mass role assignment - May god have mercy on your server")
+    
+    await interaction.response.send_message(embed=embed)
+    
+    # Start the mass assignment
+    try:
+        success_count = 0
+        failed_count = 0
+        
+        # Send a follow-up message to show progress
+        await interaction.followup.send("🚀 **MASS ASSIGNMENT IN PROGRESS...** This might take a while bestie! ⏰")
+        
+        for member in interaction.guild.members:
+            if exclude_bots and member.bot:
+                continue
+            if role in member.roles:
+                continue  # Skip if already has role
+                
+            try:
+                await member.add_roles(role, reason=f"Mass assignment by {interaction.user}: {reason}")
+                success_count += 1
+                
+                # Add a small delay to avoid rate limiting
+                if success_count % 5 == 0:
+                    await asyncio.sleep(1)  # Rate limiting protection
+                    
+            except discord.Forbidden:
+                failed_count += 1
+            except Exception:
+                failed_count += 1
+        
+        # Final report
+        chaos_results = [
+            f"🎉 **CHAOS COMPLETE!** Successfully gave {role.mention} to **{success_count}** members! The server has ascended to peak brainrot! 🧠",
+            f"✨ **MASS ASSIGNMENT FINISHED!** {success_count} people now have {role.mention}! Your server's aura just broke the meter! 📊",
+            f"🔥 **SIGMA GRINDSET ACTIVATED!** {role.mention} has been distributed to {success_count} members! The collective energy is IMMACULATE! ⚡"
+        ]
+        
+        result_embed = discord.Embed(
+            title="🎪 MASS ROLE ASSIGNMENT COMPLETE!",
+            description=f"{random.choice(chaos_results)}\n\n**Role:** {role.mention}\n**Successful:** {success_count}\n**Failed:** {failed_count}\n**Total Affected:** {success_count} members",
+            color=0x00FF00
+        )
+        
+        if failed_count > 0:
+            result_embed.add_field(
+                name="⚠️ Some Failed", 
+                value=f"{failed_count} members couldn't receive the role (permissions/hierarchy issues)", 
+                inline=False
+            )
+        
+        result_embed.add_field(
+            name="🎭 Chaos Level", 
+            value="MAXIMUM ACHIEVED! 🌪️", 
+            inline=False
+        )
+        result_embed.set_footer(text="Mass chaos deployment successful - Server will never be the same")
+        
+        await interaction.followup.send(embed=result_embed)
+        
+    except Exception as e:
+        await interaction.followup.send(f"💥 CHAOS MACHINE EXPLODED! Error during mass assignment: {str(e)} 🤪")
+
+@tree.command(name='massdm', description='📬 Send a message to multiple users - Power move energy')
+@app_commands.describe(
+    role='Role to send message to (all members with this role)',
+    message='The message to send to everyone',
+    exclude_bots='Exclude bots from mass DM (recommended)'
+)
+async def massdm_slash(interaction: discord.Interaction, role: discord.Role, message: str, exclude_bots: bool = True):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can spam everyone's DMs! That's too much power bestie! 💀", ephemeral=True)
+        return
+    
+    # Get members with the role
+    target_members = [member for member in interaction.guild.members 
+                     if role in member.roles and not (member.bot and exclude_bots)]
+    
+    if not target_members:
+        await interaction.response.send_message(f"💀 No one with {role.mention} to message! The role is emptier than Ohio! 🌽", ephemeral=True)
+        return
+    
+    # Confirmation message
+    embed = discord.Embed(
+        title="📬 MASS DM SYSTEM ACTIVATED!",
+        description=f"🎯 **Target Role:** {role.mention}\n"
+                   f"👥 **Recipients:** {len(target_members)} members\n"
+                   f"🤖 **Exclude Bots:** {'Yes' if exclude_bots else 'No'}\n\n"
+                   f"📝 **Message Preview:**\n```{message}```\n\n"
+                   f"⚠️ **Warning:** This will DM {len(target_members)} people! Some might find it annoying bestie!",
+        color=0xFF6B35
+    )
+    embed.add_field(
+        name="🚀 Chaos Meter", 
+        value="█████████░ 90% 🔥", 
+        inline=False
+    )
+    embed.set_footer(text="Mass DM deployment - Use responsibly!")
+    
+    await interaction.response.send_message(embed=embed)
+    
+    # Start mass DM process
+    try:
+        success_count = 0
+        failed_count = 0
+        
+        await interaction.followup.send("🚀 **MASS DM IN PROGRESS...** Sliding into DMs like a sigma! ⏰")
+        
+        for member in target_members:
+            try:
+                # Create personalized embed for each user
+                dm_embed = discord.Embed(
+                    title=f"📨 Message from {interaction.guild.name}",
+                    description=message,
+                    color=0x7289DA
+                )
+                dm_embed.add_field(
+                    name="📍 Server",
+                    value=interaction.guild.name,
+                    inline=True
+                )
+                dm_embed.add_field(
+                    name="👤 Sent by",
+                    value=interaction.user.display_name,
+                    inline=True
+                )
+                dm_embed.add_field(
+                    name="🎭 Your Role",
+                    value=role.name,
+                    inline=True
+                )
+                dm_embed.set_footer(text="This message was sent using GoofGuard's Mass DM system")
+                
+                # Try to send DM
+                await member.send(embed=dm_embed)
+                success_count += 1
+                
+                # Rate limiting to avoid Discord limits
+                if success_count % 5 == 0:
+                    await asyncio.sleep(2)  # 2 second delay every 5 DMs
+                    
+            except discord.Forbidden:
+                failed_count += 1  # User has DMs disabled
+            except discord.HTTPException:
+                failed_count += 1  # Other Discord API errors
+            except Exception:
+                failed_count += 1  # Any other errors
+        
+        # Final report
+        success_responses = [
+            f"🎉 **MASS DM COMPLETE!** Successfully slid into **{success_count}** DMs! Your message spread like wildfire! 🔥",
+            f"📬 **MISSION ACCOMPLISHED!** {success_count} people got your message! That's some premium communication energy! ✨",
+            f"🚀 **DM DEPLOYMENT SUCCESSFUL!** Message delivered to {success_count} users! You just became the main character of their notifications! 👑"
+        ]
+        
+        result_embed = discord.Embed(
+            title="📬 MASS DM MISSION COMPLETE!",
+            description=f"{random.choice(success_responses)}\n\n"
+                       f"**Role:** {role.mention}\n"
+                       f"**Successful:** {success_count} DMs sent ✅\n"
+                       f"**Failed:** {failed_count} DMs failed ❌\n"
+                       f"**Total Attempted:** {len(target_members)} members",
+            color=0x00FF00
+        )
+        
+        if failed_count > 0:
+            result_embed.add_field(
+                name="⚠️ Some Failed", 
+                value=f"{failed_count} members couldn't receive DMs (probably have them disabled or blocked the bot)", 
+                inline=False
+            )
+        
+        result_embed.add_field(
+            name="📊 Success Rate", 
+            value=f"{(success_count/len(target_members)*100):.1f}% delivery rate! 📈", 
+            inline=False
+        )
+        result_embed.set_footer(text="Mass DM system - Spreading chaos one notification at a time")
+        
+        await interaction.followup.send(embed=result_embed)
+        
+    except Exception as e:
+        await interaction.followup.send(f"💥 DM MACHINE BROKE! Error during mass DM: {str(e)} 📬💀")
+
+# 🛡️ VERIFICATION & SECURITY SYSTEMS 🛡️
+
+# Storage for verification configs
+verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
+pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
+
+@tree.command(name='verify-setup', description='🛡️ Setup verification system for server security')
+@app_commands.describe(
+    action='What to do (setup/disable)',
+    verified_role='Role to give after verification',
+    verify_channel='Channel where verification happens'
+)
+async def verify_setup_slash(interaction: discord.Interaction, action: str, verified_role: discord.Role = None, verify_channel: discord.TextChannel = None):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("🚫 Only admins can setup verification! That's maximum security clearance bestie! 💀", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    if action.lower() == 'setup':
+        if not verified_role:
+            await interaction.response.send_message("❌ You need to specify a verified role! Can't verify people into nothing bestie! 🎭", ephemeral=True)
+            return
+        
+        if not verify_channel:
+            await interaction.response.send_message("❌ You need a verification channel! Where else will the chaos happen? 📺", ephemeral=True)
+            return
+        
+        verification_config[guild_id] = {
+            'enabled': True,
+            'role': verified_role.id,
+            'channel': verify_channel.id
+        }
+        
+        embed = discord.Embed(
+            title="🛡️ VERIFICATION SYSTEM ACTIVATED!",
+            description=f"🔒 **MAXIMUM SECURITY MODE ENGAGED!** 🔒\n\n"
+                       f"✅ **Verified Role:** {verified_role.mention}\n"
+                       f"📺 **Verification Channel:** {verify_channel.mention}\n\n"
+                       f"🎯 **How it works:**\n"
+                       f"• New members get stuck in verification limbo\n"
+                       f"• They must complete captcha challenges\n"
+                       f"• Only sigma energy humans get through\n"
+                       f"• Bots and sus users get REJECTED!\n\n"
+                       f"Your server is now **FORTRESS LEVEL SECURE!** 🏰",
+            color=0x00FF00
+        )
+        embed.add_field(
+            name="💡 Pro Tips", 
+            value="• Make sure the verified role can see your server!\n• Set up role hierarchy properly!\n• Use `/captcha @user` for manual challenges!", 
+            inline=False
+        )
+        embed.set_footer(text="Verification powered by Ohio-grade security technology")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    elif action.lower() == 'disable':
+        if guild_id in verification_config:
+            del verification_config[guild_id]
+            
+        embed = discord.Embed(
+            title="🔓 Verification System Disabled",
+            description="Verification system has been turned off. Your server is back to trusting everyone... good luck bestie! 💀",
+            color=0xFF0000
+        )
+        await interaction.response.send_message(embed=embed)
+    
+    else:
+        await interaction.response.send_message("❌ Invalid action! Use 'setup' or 'disable' bestie! 🤪", ephemeral=True)
+
+@tree.command(name='captcha', description='🤖 Send captcha challenge to verify users')
+@app_commands.describe(
+    user='User to challenge with captcha',
+    difficulty='Captcha difficulty (easy/medium/hard)'
+)
+async def captcha_slash(interaction: discord.Interaction, user: discord.Member, difficulty: str = "medium"):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("🚫 You don't have the power to captcha people! Ask a mod bestie! 👮‍♂️", ephemeral=True)
+        return
+    
+    if user.bot:
+        await interaction.response.send_message("💀 That's literally a bot bestie! They don't need captcha, they ARE the captcha! 🤖", ephemeral=True)
+        return
+    
+    # Generate captcha based on difficulty
+    if difficulty.lower() == "easy":
+        captcha_code = str(random.randint(100, 999))
+        complexity_desc = "3-digit number"
+    elif difficulty.lower() == "hard":
+        captcha_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=6))
+        complexity_desc = "6-character alphanumeric code"
+    else:  # medium
+        captcha_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=4))
+        complexity_desc = "4-character alphanumeric code"
+    
+    # Store pending verification
+    pending_verifications[user.id] = {
+        'guild_id': interaction.guild.id,
+        'captcha_code': captcha_code,
+        'attempts': 0,
+        'issued_by': interaction.user.id
+    }
+    
+    # Create captcha embed for the user
+    captcha_embed = discord.Embed(
+        title="🤖 CAPTCHA CHALLENGE ACTIVATED!",
+        description=f"🔒 **SECURITY CHECKPOINT DETECTED!** 🔒\n\n"
+                   f"🎯 **Your Mission:** Prove you're human (not an Ohio resident)\n"
+                   f"🧠 **Difficulty:** {difficulty.title()} ({complexity_desc})\n"
+                   f"🔢 **Your Code:** `{captcha_code}`\n\n"
+                   f"📝 **Instructions:**\n"
+                   f"Type the code exactly as shown above to verify you're not a bot!\n"
+                   f"You have 3 attempts before the system assumes you're sus! 👀\n\n"
+                   f"⚠️ **Warning:** Failure results in being labeled as 'Probably a Bot' 🤖",
+        color=0xFFA500
+    )
+    captcha_embed.add_field(
+        name="💡 Pro Tip", 
+        value="Copy-paste won't work here bestie! Type it manually to prove human status! 🧠", 
+        inline=False
+    )
+    captcha_embed.set_footer(text="Captcha system powered by anti-bot sigma technology")
+    
+    try:
+        await user.send(embed=captcha_embed)
+        
+        # Confirmation for moderator
+        mod_embed = discord.Embed(
+            title="🤖 CAPTCHA DEPLOYED!",
+            description=f"Captcha challenge sent to {user.mention}!\n\n"
+                       f"**Difficulty:** {difficulty.title()}\n"
+                       f"**Code:** `{captcha_code}` (for your reference)\n"
+                       f"**Status:** Awaiting human verification... 🕒",
+            color=0x00FF00
+        )
+        await interaction.response.send_message(embed=mod_embed)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message(f"💀 Can't DM {user.mention}! Their DMs are more closed than Ohio borders! Try a different method! 📬❌", ephemeral=True)
+
+@tree.command(name='verify', description='✅ Verify yourself with captcha code')
+@app_commands.describe(code='The captcha code you received')
+async def verify_slash(interaction: discord.Interaction, code: str):
+    user_id = interaction.user.id
+    
+    if user_id not in pending_verifications:
+        await interaction.response.send_message("❌ No pending verification found! You might already be verified or no captcha was issued! 🤔", ephemeral=True)
+        return
+    
+    verification_data = pending_verifications[user_id]
+    correct_code = verification_data['captcha_code']
+    attempts = verification_data['attempts']
+    
+    if code.upper() == correct_code.upper():
+        # SUCCESS! Verification complete
+        guild_id = str(verification_data['guild_id'])
+        guild = interaction.guild
+        
+        # Give verified role if verification system is enabled
+        if guild_id in verification_config:
+            verified_role_id = verification_config[guild_id]['role']
+            verified_role = guild.get_role(verified_role_id)
+            
+            if verified_role:
+                try:
+                    await interaction.user.add_roles(verified_role, reason="✅ Captcha verification successful!")
+                except discord.Forbidden:
+                    await interaction.response.send_message("✅ Verification successful but I couldn't give you the role! Ask an admin to fix my permissions! 😅", ephemeral=True)
+                    return
+        
+        # Remove from pending
+        del pending_verifications[user_id]
+        
+        success_responses = [
+            "🎉 **HUMAN VERIFICATION COMPLETE!** Welcome to the elite human club bestie! 🧠",
+            "✅ **CAPTCHA CRUSHED!** Your human status has been officially certified! 👑",
+            "🔥 **VERIFICATION SUCCESSFUL!** You've proven you're not an Ohio bot! Congrats! 🌽",
+            "⚡ **HUMAN CONFIRMED!** Your sigma energy levels are off the charts! Welcome! 💪",
+            "🎭 **ACCESS GRANTED!** You've passed the vibe check and the bot check! Double win! 🏆"
+        ]
+        
+        embed = discord.Embed(
+            title="✅ VERIFICATION SUCCESSFUL!",
+            description=random.choice(success_responses),
+            color=0x00FF00
+        )
+        embed.add_field(
+            name="🎯 Status Update", 
+            value="You now have full access to the server! Time to cause some chaos! 😈", 
+            inline=False
+        )
+        embed.set_footer(text="Welcome to the verified human club - Population: You + Everyone Else Who Passed")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    else:
+        # WRONG CODE
+        verification_data['attempts'] += 1
+        attempts = verification_data['attempts']
+        
+        if attempts >= 3:
+            # Failed too many times
+            del pending_verifications[user_id]
+            
+            fail_embed = discord.Embed(
+                title="❌ VERIFICATION FAILED!",
+                description="🤖 **SUSPICIOUS ACTIVITY DETECTED!** 🤖\n\n"
+                           f"You've failed captcha verification {attempts} times!\n"
+                           f"Your human status is now **HIGHLY QUESTIONABLE** 👀\n\n"
+                           f"**Possible Explanations:**\n"
+                           f"• You're actually a bot 🤖\n"
+                           f"• You're from Ohio (understandable) 🌽\n"
+                           f"• Your brain is in brainrot mode 🧠\n\n"
+                           f"**Next Steps:** Ask a moderator to verify you manually, or try again later!",
+                color=0xFF0000
+            )
+            fail_embed.set_footer(text="Bot detection system - Protecting servers from sus behavior since 2024")
+            
+            await interaction.response.send_message(embed=fail_embed, ephemeral=True)
+        else:
+            # Wrong but can try again
+            remaining = 3 - attempts
+            
+            retry_embed = discord.Embed(
+                title="❌ Wrong Code!",
+                description=f"That's not the right code bestie! 💀\n\n"
+                           f"**Attempts:** {attempts}/3\n"
+                           f"**Remaining:** {remaining} attempts\n\n"
+                           f"Double-check the code and try again! Make sure you're typing it exactly as shown! 🔍",
+                color=0xFFA500
+            )
+            await interaction.response.send_message(embed=retry_embed, ephemeral=True)
+
+@tree.command(name='verification-status', description='📋 Check verification system status and pending users')
+async def verification_status_slash(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("🚫 You don't have permission to check verification status! Ask a mod bestie! 👮‍♂️", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    embed = discord.Embed(
+        title="📋 Verification System Status",
+        description="Current verification configuration and pending users",
+        color=0x7289DA
+    )
+    
+    # System status
+    if guild_id in verification_config:
+        config = verification_config[guild_id]
+        verified_role = interaction.guild.get_role(config['role'])
+        verify_channel = interaction.guild.get_channel(config['channel'])
+        
+        embed.add_field(
+            name="🛡️ System Status",
+            value=f"✅ **ACTIVE**\n"
+                  f"**Verified Role:** {verified_role.mention if verified_role else 'Role not found!'}\n"
+                  f"**Verify Channel:** {verify_channel.mention if verify_channel else 'Channel not found!'}",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🛡️ System Status",
+            value="❌ **DISABLED**\nUse `/verify-setup setup` to enable verification!",
+            inline=False
+        )
+    
+    # Pending verifications
+    guild_pending = [user_id for user_id, data in pending_verifications.items() if data['guild_id'] == interaction.guild.id]
+    
+    if guild_pending:
+        pending_users = []
+        for user_id in guild_pending[:10]:  # Limit to 10 to avoid embed limits
+            user = interaction.guild.get_member(user_id)
+            if user:
+                data = pending_verifications[user_id]
+                pending_users.append(f"• {user.mention} ({data['attempts']}/3 attempts)")
+        
+        embed.add_field(
+            name=f"⏳ Pending Verifications ({len(guild_pending)})",
+            value="\n".join(pending_users) if pending_users else "No pending verifications found",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="⏳ Pending Verifications",
+            value="No users currently awaiting verification! ✨",
+            inline=False
+        )
+    
+    embed.set_footer(text="Use /captcha @user to manually challenge suspicious users")
+    await interaction.response.send_message(embed=embed)
+
+# 📚 TUTORIAL SYSTEM 📚
+
+@tree.command(name='tutorial', description='📚 Get detailed setup tutorials for moderation features')
+@app_commands.describe(command='Which moderation feature you want to learn about')
+@app_commands.choices(command=[
+    app_commands.Choice(name='Verification System', value='verify'),
+    app_commands.Choice(name='Auto-Moderation', value='automod'),
+    app_commands.Choice(name='Autorole System', value='autorole'),
+    app_commands.Choice(name='Welcome System', value='welcome'),
+    app_commands.Choice(name='Warning System', value='warnings'),
+    app_commands.Choice(name='Leveling System', value='leveling'),
+    app_commands.Choice(name='Role Management', value='roles'),
+    app_commands.Choice(name='Mass Commands', value='mass'),
+    app_commands.Choice(name='Lockdown System', value='lockdown'),
+    app_commands.Choice(name='Ghost Mode', value='ghost')
+])
+async def tutorial_slash(interaction: discord.Interaction, command: str):
+    
+    tutorials = {
+        'verify': {
+            'title': '🛡️ Verification System Tutorial',
+            'description': 'Complete guide to setting up server verification with captcha challenges!',
+            'color': 0x00FF00,
+            'steps': [
+                "**Step 1: Create Roles**\n• Create a `@Verified` role with full server permissions\n• Create a `@Unverified` role with no permissions (optional)",
+                "**Step 2: Setup Verification**\n• Use `/verify-setup setup @Verified #verification-channel`\n• Make sure the bot can manage the verified role!",
+                "**Step 3: Test the System**\n• Use `/captcha @user medium` to test manual challenges\n• Users complete verification with `/verify [code]`",
+                "**Step 4: Monitor Activity**\n• Use `/verification-status` to check pending verifications\n• Failed attempts are tracked automatically"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Set channel permissions so unverified users can only see verification channel\n• Use difficulty levels: easy (numbers), medium (mixed), hard (complex)\n• The system automatically assigns roles on successful verification!'
+        },
+        'automod': {
+            'title': '🤖 Auto-Moderation Tutorial',
+            'description': 'Setup automatic content protection and moderation actions!',
+            'color': 0xFF6B35,
+            'steps': [
+                "**Step 1: Basic Protection**\n• `/automod spam true warn` - Warn for spam messages\n• `/automod caps true mute` - Mute for excessive caps\n• `/automod mentions true kick` - Kick for mass mentions",
+                "**Step 2: Content Protection**\n• `/automod links true warn` - Filter suspicious links\n• `/automod invites true kick` - Block Discord invites\n• `/automod nsfw true ban` - Remove NSFW content",
+                "**Step 3: Advanced Features**\n• `/automod duplicates true warn` - Stop copy-paste spam\n• `/automod emojis true warn` - Control external emojis\n• `/automod files true kick` - Block dangerous files",
+                "**Step 4: Configure Actions**\n• Actions: warn, mute (10min), kick, ban\n• Use `/automodstatus` to check all settings\n• Warning escalation tracks repeat offenders"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Start with warnings before using harsh actions\n• Combine features for maximum protection\n• Use `/automod warnings true kick 3` for escalation after 3 warnings!'
+        },
+        'autorole': {
+            'title': '🎭 Autorole System Tutorial', 
+            'description': 'Automatically assign roles to new members who join your server!',
+            'color': 0x7289DA,
+            'steps': [
+                "**Step 1: Create Roles**\n• Create roles like `@Member`, `@Newcomer`, etc.\n• Make sure bot role is above the roles you want to assign",
+                "**Step 2: Setup Autorole**\n• `/autorole setup @Member` - Basic setup\n• `/autorole setup @Member #welcome` - With welcome channel",
+                "**Step 3: Add More Roles**\n• `/autorole add @Newcomer` - Add additional roles\n• `/autorole list` - View all autoroles",
+                "**Step 4: Manage System**\n• `/autorole remove @OldRole` - Remove roles\n• `/autorole disable` - Turn off system completely"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Test with alt accounts or friends first\n• Don\'t assign admin roles automatically!\n• Autoroles work with the welcome system for maximum impact!'
+        },
+        'welcome': {
+            'title': '🎪 Welcome System Tutorial',
+            'description': 'Create epic welcome messages for new server members!',
+            'color': 0xFF69B4,
+            'steps': [
+                "**Step 1: Set Welcome Channel**\n• `/configwelcomechannel #welcome` - Choose your channel\n• Make sure bot can send messages there",
+                "**Step 2: Customize Message**\n• `/configwelcomemessage Welcome {user} to our chaos!`\n• Use {user}, {username}, {server} as variables",
+                "**Step 3: Enable System**\n• `/togglewelcome` - Turn welcomes on/off\n• `/welcomestatus` - Check current settings",
+                "**Step 4: Test and Reset**\n• Test by having someone join\n• `/resetwelcome` - Reset to defaults if needed"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Combine with autorole for complete new member experience\n• Custom messages can include server rules or links\n• Welcome embeds are automatically styled with random colors!'
+        },
+        'warnings': {
+            'title': '⚠️ Warning System Tutorial',
+            'description': 'Track user behavior with warnings and automatic escalation!',
+            'color': 0xFFA500,
+            'steps': [
+                "**Step 1: Issue Warnings**\n• `/warn @user [reason]` - Give a warning\n• Warnings are automatically tracked per user",
+                "**Step 2: Setup Escalation**\n• `/automod warnings true mute 3` - Auto-mute after 3 warnings\n• `/automod warnings true kick 5` - Auto-kick after 5 warnings",
+                "**Step 3: Manage Warnings**\n• `/warnings @user` - View user's warning history\n• `/unwarn @user 2` - Remove 2 warnings\n• `/clearwarnings @user` - Clear all warnings",
+                "**Step 4: Monitor System**\n• Escalation happens automatically\n• Users get notified of warning counts\n• Perfect for tracking problematic users"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Set reasonable escalation thresholds\n• Use warnings before kicks/bans for fairness\n• Warning history helps track patterns over time!'
+        },
+        'leveling': {
+            'title': '📈 Leveling System Tutorial',
+            'description': 'Gamify your server with XP and levels for active members!',
+            'color': 0x00BFFF,
+            'steps': [
+                "**Step 1: Enable System**\n• `/configlevel enable` - Turn on leveling\n• Members gain XP by chatting (1 minute cooldown)",
+                "**Step 2: Check Progress**\n• `/level` - Check your own level and XP\n• `/level @user` - Check someone else's progress\n• `/leaderboard` - See top server members",
+                "**Step 3: Understand Mechanics**\n• XP gain: Random 15-25 XP per message\n• Level formula: Level = √(XP/100) + 1\n• Titles change based on level achievements"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Levels create healthy competition\n• XP farming is prevented with cooldowns\n• Higher levels get increasingly harder to achieve!'
+        },
+        'roles': {
+            'title': '🎭 Role Management Tutorial',
+            'description': 'Master role assignment and mass role operations!',
+            'color': 0x9B59B6,
+            'steps': [
+                "**Step 1: Individual Roles**\n• `/roleadd @role @user [reason]` - Give role to one person\n• Check role hierarchy - you can't assign roles above your own",
+                "**Step 2: Mass Role Operations**\n• `/massaddrole @role` - Give role to EVERYONE\n• Use `exclude_bots: true` to skip bot accounts\n• This is CHAOS MODE - use carefully!",
+                "**Step 3: Safety Checks**\n• Bot checks role hierarchy automatically\n• Confirmation messages prevent accidents\n• Progress tracking shows success/failure rates"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Test individual roleadd first\n• Mass operations can take time with large servers\n• Always double-check which role you\'re mass-assigning!'
+        },
+        'mass': {
+            'title': '📢 Mass Commands Tutorial',
+            'description': 'Communicate with multiple users efficiently!',
+            'color': 0xE74C3C,
+            'steps': [
+                "**Step 1: Mass DM Setup**\n• `/massdm @role \"Your message here\"` - DM everyone with a role\n• Choose exclude_bots setting carefully",
+                "**Step 2: Understand Limits**\n• Rate limiting prevents Discord API issues\n• Some users may have DMs disabled\n• Success rate shows delivery statistics",
+                "**Step 3: Use Responsibly**\n• Only for important announcements\n• Don't spam - users can leave servers for this\n• Include clear sender information"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Test with a small role first\n• Keep messages brief and clear\n• Mass DMs should be rare - use channels for regular updates!'
+        },
+        'lockdown': {
+            'title': '🚨 Lockdown System Tutorial',
+            'description': 'Emergency server protection during raids or incidents!',
+            'color': 0xFF0000,
+            'steps': [
+                "**Step 1: Emergency Lockdown**\n• `/lockdown` - Instantly restrict all channels\n• Only staff can send messages during lockdown\n• Prevents raid damage and spam floods",
+                "**Step 2: Monitor Situation**\n• Deal with the threat (ban raiders, etc.)\n• Lockdown stays active until manually lifted\n• Staff can still moderate during lockdown",
+                "**Step 3: Restore Access**\n• `/unlock` - Restore normal server permissions\n• Double-check that threats are resolved\n• Announce all-clear to members if needed"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Use lockdown immediately during raids\n• Staff roles need proper permissions to work during lockdown\n• Better to over-protect than under-protect your server!'
+        },
+        'ghost': {
+            'title': '👻 Ghost Mode Tutorial',
+            'description': 'Temporarily hide problematic users without full punishment!',
+            'color': 0x95A5A6,
+            'steps': [
+                "**Step 1: Activate Ghost Mode**\n• `/ghost-mode @user` - Hide their messages temporarily\n• User can still see the server but others can't see them\n• Less harsh than muting or kicking",
+                "**Step 2: Monitor User**\n• Ghost mode gives users time to cool down\n• They can still read and learn from others\n• Staff can still see their activity",
+                "**Step 3: Restore Visibility**\n• Ghost mode can be lifted manually\n• Use for temporary cooling-off periods\n• Good middle ground between warning and muting"
+            ],
+            'tips': '💡 **Pro Tips:**\n• Great for heated arguments or minor disruptions\n• Less punitive than mutes but still effective\n• Explain to the user why they\'re in ghost mode!'
+        }
+    }
+    
+    if command not in tutorials:
+        await interaction.response.send_message("❌ Tutorial not found! Use the dropdown to select a valid command bestie! 🤪", ephemeral=True)
+        return
+    
+    tutorial = tutorials[command]
+    
+    embed = discord.Embed(
+        title=tutorial['title'],
+        description=tutorial['description'],
+        color=tutorial['color']
+    )
+    
+    # Add steps
+    for i, step in enumerate(tutorial['steps'], 1):
+        embed.add_field(
+            name=f"📋 Step {i}",
+            value=step,
+            inline=False
+        )
+    
+    # Add tips
+    if 'tips' in tutorial:
+        embed.add_field(
+            name="💡 Pro Tips & Best Practices",
+            value=tutorial['tips'],
+            inline=False
+        )
+    
+    # Add footer with related commands
+    embed.set_footer(text="💡 Tip: Use /help to see all commands, or ask staff if you need help setting up!")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # 🎮 LEVELING SYSTEM COMMANDS 🎮
 
 @tree.command(name="configlevel", description="⚙️ Configure the brainrot leveling system")
@@ -4293,7 +5091,7 @@ def start_bot_with_retry(token, max_retries=3):
             bot.run(token, reconnect=True, log_level=logging.WARNING)
             break  # If we get here, bot ran successfully
         except discord.LoginFailure:
-            logger.error("❌ Invalid bot token! Check your DISCORD_BOT_TOKEN")
+            logger.error("❌ Invalid bot token! Check your DISCORD_TOKEN")
             exit(1)
         except discord.ConnectionClosed:
             logger.warning(f"Connection closed, retrying in 10 seconds... (attempt {attempt + 1})")
@@ -4316,9 +5114,9 @@ if __name__ == "__main__":
     logger.info("🚀 Initializing Goofy Mod Bot for hosting...")
 
     # Validate token
-    token = os.getenv('DISCORD_BOT_TOKEN')
+    token = os.getenv('DISCORD_TOKEN')
     if not token:
-        logger.error("❌ No bot token found! Please set DISCORD_BOT_TOKEN in your environment variables!")
+        logger.error("❌ No bot token found! Please set DISCORD_TOKEN in your environment variables!")
         exit(1)
 
     logger.info("🚀 Starting Goofy Mod bot with enhanced hosting features...")
