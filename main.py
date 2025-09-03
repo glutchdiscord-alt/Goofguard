@@ -5,13 +5,30 @@ import os
 import random
 import asyncio
 import json
+import logging
+import time
 from datetime import timedelta
 from dotenv import load_dotenv
 from flask import Flask
 import threading
+from werkzeug.serving import WSGIRequestHandler
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging for better hosting monitoring
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Output to console for Render logs
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Suppress Flask development server warnings
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+WSGIRequestHandler.log_request = lambda self, code='-', size='-': None
 
 # Bot setup with all necessary intents
 intents = discord.Intents.default()
@@ -24,22 +41,49 @@ class GoofyMod(discord.Client):
     def __init__(self):
         super().__init__(intents=intents)
         self.synced = False
+        self.start_time = time.time()
+        self.reconnect_count = 0
         
     async def setup_hook(self):
         """Called when bot is starting up"""
-        print(f"🤪 {self.user} is getting ready to be goofy!")
+        logger.info(f"🤪 {self.user} is getting ready to be goofy!")
         self.update_status.start()
         
     async def on_ready(self):
         """Called when bot is ready"""
         await self.wait_until_ready()
         if not self.synced:
-            await tree.sync()
-            self.synced = True
-            print("🔄 Slash commands synced!")
+            try:
+                await tree.sync()
+                self.synced = True
+                logger.info("🔄 Slash commands synced successfully!")
+            except Exception as e:
+                logger.error(f"Failed to sync commands: {e}")
         
-        print(f"🎭 Goofy Mod is online and watching over {len(self.guilds)} goofy servers!")
+        logger.info(f"🎭 Goofy Mod is online and watching over {len(self.guilds)} goofy servers!")
         await self.update_server_status()
+        
+        # Log hosting stats
+        uptime = time.time() - self.start_time
+        logger.info(f"✅ Bot fully ready! Uptime: {uptime:.1f}s | Reconnects: {self.reconnect_count}")
+        
+    async def on_connect(self):
+        """Called when bot connects to Discord"""
+        logger.info("🔗 Connected to Discord gateway")
+        
+    async def on_disconnect(self):
+        """Called when bot disconnects from Discord"""
+        logger.warning("⚠️ Disconnected from Discord gateway")
+        
+    async def on_resumed(self):
+        """Called when bot resumes connection"""
+        self.reconnect_count += 1
+        logger.info(f"🔄 Resumed connection (reconnect #{self.reconnect_count})")
+        
+    async def on_error(self, event, *args, **kwargs):
+        """Global error handler for bot events"""
+        logger.error(f"🚨 Bot error in {event}: {args[0] if args else 'Unknown error'}")
+        # Don't let errors crash the bot
 
     async def update_server_status(self):
         """Update the bot's status to show server count"""
@@ -59,12 +103,13 @@ class GoofyMod(discord.Client):
     async def on_guild_join(self, guild):
         """Update status when joining a new server"""
         await self.update_server_status()
-        print(f"🎪 Joined a new goofy server: {guild.name}")
-
+        logger.info(f"🎪 Joined a new goofy server: {guild.name}")
+        
     async def on_guild_remove(self, guild):
         """Update status when leaving a server"""
         await self.update_server_status()
-        print(f"😢 Left server: {guild.name}")
+        logger.info(f"😢 Left server: {guild.name}")
+
 
     async def on_member_join(self, member):
         """Handle new member joins with goofy welcome messages"""
@@ -126,10 +171,10 @@ class GoofyMod(discord.Client):
             embed.set_footer(text=random.choice(footers))
             
             await welcome_channel.send(embed=embed)
-            print(f"🎪 Welcomed {member.name} to {member.guild.name}")
+            logger.info(f"🎪 Welcomed {member.name} to {member.guild.name}")
             
         except Exception as e:
-            print(f"Error sending welcome message: {e}")
+            logger.error(f"Error sending welcome message: {e}")
 
 # Initialize bot and command tree
 bot = GoofyMod()
@@ -182,8 +227,10 @@ def load_welcome_config():
         if os.path.exists(WELCOME_CONFIG_FILE):
             with open(WELCOME_CONFIG_FILE, 'r') as f:
                 return json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Error loading welcome config: {e}")
     except Exception as e:
-        print(f"Error loading welcome config: {e}")
+        logger.error(f"Unexpected error loading config: {e}")
     return {}
 
 def save_welcome_config(config):
@@ -191,8 +238,10 @@ def save_welcome_config(config):
     try:
         with open(WELCOME_CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Error saving welcome config: {e}")
     except Exception as e:
-        print(f"Error saving welcome config: {e}")
+        logger.error(f"Unexpected error saving config: {e}")
 
 # Goofy responses for different situations
 GOOFY_RESPONSES = {
@@ -1747,59 +1796,141 @@ async def on_message(message):
 # Error handling for slash commands
 @tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
-    elif isinstance(error, app_commands.CommandOnCooldown):
-        await interaction.response.send_message(f"⏰ Slow down there! Try again in {error.retry_after:.1f} seconds!", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"Something went wonky! 🤪 Error: {str(error)}", ephemeral=True)
+    """Enhanced error handling for slash commands"""
+    try:
+        if isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        elif isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(f"⏰ Slow down there! Try again in {error.retry_after:.1f} seconds!", ephemeral=True)
+        elif isinstance(error, app_commands.BotMissingPermissions):
+            await interaction.response.send_message("🤖 I don't have the required permissions for this command!", ephemeral=True)
+        else:
+            logger.error(f"Command error in {interaction.command.name if interaction.command else 'unknown'}: {error}")
+            await interaction.response.send_message(f"Something went wonky! 🤪 Error: {str(error)}", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Error in error handler: {e}")
+        # Last resort - try to send a basic message
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("Something went really wonky! 😵", ephemeral=True)
+        except:
+            pass  # Give up if we can't even send an error message
 
 # Simple Flask web server for Render Web Service compatibility
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return {
-        "status": "online",
-        "bot_name": "Goofy Mod Bot",
-        "message": "🤪 Bot is running! This endpoint keeps the web service alive on Render.",
-        "servers": len(bot.guilds) if bot.is_ready() else 0
-    }
+    try:
+        uptime = time.time() - bot.start_time if hasattr(bot, 'start_time') else 0
+        return {
+            "status": "online",
+            "bot_name": "Goofy Mod Bot",
+            "message": "🤪 Bot is running! This endpoint keeps the web service alive on Render.",
+            "servers": len(bot.guilds) if bot.is_ready() else 0,
+            "uptime_seconds": round(uptime, 1),
+            "bot_ready": bot.is_ready(),
+            "reconnects": getattr(bot, 'reconnect_count', 0)
+        }
+    except Exception as e:
+        logger.error(f"Health endpoint error: {e}")
+        return {"status": "error", "message": str(e)}, 500
 
 @app.route('/health')
 def health():
-    return {
-        "status": "healthy",
-        "bot_ready": bot.is_ready(),
-        "servers": len(bot.guilds) if bot.is_ready() else 0
-    }
+    try:
+        is_ready = bot.is_ready()
+        uptime = time.time() - bot.start_time if hasattr(bot, 'start_time') else 0
+        
+        # Health checks
+        health_status = "healthy" if is_ready else "unhealthy"
+        
+        return {
+            "status": health_status,
+            "bot_ready": is_ready,
+            "servers": len(bot.guilds) if is_ready else 0,
+            "uptime_seconds": round(uptime, 1),
+            "reconnects": getattr(bot, 'reconnect_count', 0),
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "error", "message": str(e)}, 500
+
+@app.route('/ping')
+def ping():
+    """Simple ping endpoint for monitoring"""
+    return {"pong": True, "timestamp": time.time()}
 
 def run_web_server():
-    """Run Flask web server"""
-    port = int(os.getenv('PORT', 5000))  # Render provides PORT env var
-    print(f"🌐 Starting web server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    """Run Flask web server with enhanced error handling"""
+    try:
+        port = int(os.getenv('PORT', 5000))  # Render provides PORT env var
+        logger.info(f"🌐 Starting web server on port {port}...")
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Web server failed to start: {e}")
+        # Don't exit - let the bot continue running
+        time.sleep(5)  # Wait before potential restart
 
-# Optimize for Render deployment
+def start_bot_with_retry(token, max_retries=3):
+    """Start bot with automatic retry on failure"""
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"🤖 Starting Discord bot (attempt {attempt + 1}/{max_retries})...")
+            bot.run(token, reconnect=True, log_level=logging.WARNING)
+            break  # If we get here, bot ran successfully
+        except discord.LoginFailure:
+            logger.error("❌ Invalid bot token! Check your DISCORD_BOT_TOKEN")
+            exit(1)
+        except discord.ConnectionClosed:
+            logger.warning(f"Connection closed, retrying in 10 seconds... (attempt {attempt + 1})")
+            if attempt < max_retries - 1:
+                time.sleep(10)
+            else:
+                logger.error("Max retries reached, exiting")
+                exit(1)
+        except Exception as e:
+            logger.error(f"Bot error (attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                logger.info("Retrying in 15 seconds...")
+                time.sleep(15)
+            else:
+                logger.error("Max retries reached, exiting")
+                exit(1)
+
+# Optimize for Render deployment with enhanced reliability
 if __name__ == "__main__":
+    logger.info("🚀 Initializing Goofy Mod Bot for hosting...")
+    
+    # Validate token
     token = os.getenv('DISCORD_BOT_TOKEN')
     if not token:
-        print("❌ No bot token found! Please set DISCORD_BOT_TOKEN in your environment variables!")
+        logger.error("❌ No bot token found! Please set DISCORD_BOT_TOKEN in your environment variables!")
         exit(1)
     
-    print("🚀 Starting Goofy Mod bot with web server...")
+    logger.info("🚀 Starting Goofy Mod bot with enhanced hosting features...")
     
     try:
-        # Start Flask web server in a separate thread
-        web_thread = threading.Thread(target=run_web_server, daemon=True)
+        # Start Flask web server in a separate daemon thread
+        web_thread = threading.Thread(target=run_web_server, daemon=True, name="WebServer")
         web_thread.start()
-        print("✅ Web server started!")
         
-        # Start Discord bot (this blocks)
-        print("🤖 Starting Discord bot...")
-        bot.run(token)
+        # Wait a moment for web server to start
+        time.sleep(2)
+        
+        if web_thread.is_alive():
+            logger.info("✅ Web server started successfully!")
+        else:
+            logger.warning("⚠️ Web server thread not responding")
+        
+        # Start Discord bot with retry logic
+        start_bot_with_retry(token, max_retries=3)
+        
     except KeyboardInterrupt:
-        print("\n🛑 Bot stopped by user")
+        logger.info("\n🛑 Bot stopped by user")
     except Exception as e:
-        print(f"💥 Critical error: {e}")
+        logger.error(f"💥 Critical startup error: {e}")
         exit(1)
+    finally:
+        logger.info("🔄 Bot shutdown complete")
