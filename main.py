@@ -381,6 +381,52 @@ def auto_save_config(config_type):
     """Automatically save a specific config after modification"""
     save_config(config_type)
 
+# Periodic backup system
+import signal
+import sys
+import shutil
+
+def create_backup():
+    """Create backup of all configurations"""
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = "config_backups"
+    
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        for config_type, filename in CONFIG_FILES.items():
+            if os.path.exists(filename):
+                backup_filename = f"{backup_dir}/{config_type}_backup_{timestamp}.json"
+                import shutil
+                shutil.copy2(filename, backup_filename)
+        
+        # Also backup user levels
+        if os.path.exists('user_levels.json'):
+            shutil.copy2('user_levels.json', f"{backup_dir}/user_levels_backup_{timestamp}.json")
+        if os.path.exists('level_config.json'):
+            shutil.copy2('level_config.json', f"{backup_dir}/level_config_backup_{timestamp}.json")
+        
+        logger.info(f"📦 Configuration backup created: {timestamp}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to create backup: {e}")
+        return False
+
+def graceful_shutdown(signum, frame):
+    """Handle graceful shutdown to save all data"""
+    logger.info("🛑 Received shutdown signal, saving all configurations...")
+    save_all_configs()
+    save_user_data()
+    save_level_config()
+    create_backup()
+    logger.info("💾 All data saved successfully. Goodbye!")
+    sys.exit(0)
+
+# Register signal handlers for graceful shutdown
+signal.signal(signal.SIGTERM, graceful_shutdown)
+signal.signal(signal.SIGINT, graceful_shutdown)
+
 def load_user_data():
     """Load user level data from JSON file"""
     global user_levels
@@ -487,10 +533,13 @@ class GoofyMod(discord.Client):
     async def setup_hook(self):
         """Called when bot is starting up"""
         logger.info(f"🤪 {self.user} is getting ready to be goofy!")
-        # Load leveling data on startup
+        # Load ALL persistent data on startup
         load_user_data()
         load_level_config()
+        load_all_configs()  # Load all bot configurations from persistent storage
         self.update_status.start()
+        # Start hourly backup system
+        self.auto_backup_configs.start()
 
     async def on_ready(self):
         """Called when bot is ready"""
@@ -542,6 +591,18 @@ class GoofyMod(discord.Client):
         """Update status every 10 minutes"""
         if self.is_ready():
             await self.update_server_status()
+    
+    @tasks.loop(hours=1)
+    async def auto_backup_configs(self):
+        """Automatically backup configurations every hour"""
+        try:
+            save_all_configs()  # Save current state
+            save_user_data()
+            save_level_config()
+            create_backup()  # Create timestamped backup
+            logger.info("🔄 Hourly configuration backup completed")
+        except Exception as e:
+            logger.error(f"❌ Failed to create hourly backup: {e}")
 
     async def on_guild_join(self, guild):
         """Update status when joining a new server"""
@@ -1562,6 +1623,174 @@ async def purge_slash(interaction: discord.Interaction, amount: int = 10):
     except Exception as e:
         await interaction.followup.send(f"Cleaning machine broke! Error: {str(e)} 🤖", ephemeral=True)
 
+@tree.command(name='stick', description='Pin a message to the channel 📌')
+@app_commands.describe(
+    message_id='ID of message to pin (required)',
+    reason='Reason for pinning (optional)'
+)
+async def stick_slash(interaction: discord.Interaction, message_id: str = None, reason: str = "Important message"):
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    # Try to find the message to pin
+    message_to_pin = None
+    
+    # For slash commands, we can only work with message_id parameter
+    # (Reply functionality doesn't work with slash commands)
+    if message_id:
+        # Try to get message by ID
+        try:
+            message_to_pin = await interaction.channel.fetch_message(int(message_id))
+        except ValueError:
+            await interaction.response.send_message("❌ Invalid message ID! Make sure it's a number! 🔢", ephemeral=True)
+            return
+        except discord.NotFound:
+            await interaction.response.send_message("❌ Can't find a message with that ID in this channel! 🔍", ephemeral=True)
+            return
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ I don't have permission to access that message! 🚫", ephemeral=True)
+            return
+    else:
+        await interaction.response.send_message("❌ You need to provide a message ID to pin!\n\n**Usage:**\n• `/stick [message_id]`\n• Or right-click a message → Apps → Stick Message (context menu)", ephemeral=True)
+        return
+    
+    # Check if message is already pinned
+    if message_to_pin.pinned:
+        await interaction.response.send_message(f"📌 That message is already pinned bestie! No need to stick it twice! ✨", ephemeral=True)
+        return
+    
+    # Check pin limit (Discord allows max 50 pins per channel)
+    pins = await interaction.channel.pins()
+    if len(pins) >= 50:
+        await interaction.response.send_message("⚠️ This channel has reached the maximum pin limit (50)! Unpin some messages first! 📌", ephemeral=True)
+        return
+    
+    try:
+        # Pin the message
+        await message_to_pin.pin(reason=f"Pinned by {interaction.user} ({interaction.user.id}): {reason}")
+        
+        # Create success embed
+        embed = discord.Embed(
+            title="📌 Message Successfully Pinned!",
+            description=f"🎯 **STICK ACTIVATED!** Message has been permanently attached to this channel! 🔗\n\n"
+                       f"**Message Author:** {message_to_pin.author.mention}\n"
+                       f"**Pinned By:** {interaction.user.mention}\n"
+                       f"**Reason:** {reason}\n"
+                       f"**Channel:** {interaction.channel.mention}",
+            color=0x00FF00
+        )
+        
+        # Add message preview (truncated if too long)
+        message_content = message_to_pin.content if message_to_pin.content else "[No text content]"
+        if len(message_content) > 200:
+            message_content = message_content[:200] + "..."
+        
+        embed.add_field(
+            name="📝 Message Preview",
+            value=f"```{message_content}```",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 Pin Stats", 
+            value=f"Total pins in channel: {len(pins) + 1}/50", 
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔗 Quick Access",
+            value=f"[Jump to pinned message]({message_to_pin.jump_url})",
+            inline=True
+        )
+        
+        embed.set_footer(text="Pro tip: Right-click messages and use context menu for easy pinning!")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ I don't have permission to pin messages in this channel! Ask an admin to fix my permissions! 🔧", ephemeral=True)
+    except discord.HTTPException as e:
+        if "Maximum number of pins reached" in str(e):
+            await interaction.response.send_message("⚠️ Maximum pins reached (50)! Unpin some old ones first! 📌", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Failed to pin message! Error: {str(e)} 🤖", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Something went wrong! Error: {str(e)} 🤪", ephemeral=True)
+
+# Context menu command for right-clicking messages to pin them
+@tree.context_menu(name='Stick Message')
+async def stick_context_menu(interaction: discord.Interaction, message: discord.Message):
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    # Check if message is already pinned
+    if message.pinned:
+        await interaction.response.send_message(f"📌 That message is already pinned bestie! No need to stick it twice! ✨", ephemeral=True)
+        return
+    
+    # Check pin limit (Discord allows max 50 pins per channel)
+    pins = await interaction.channel.pins()
+    if len(pins) >= 50:
+        await interaction.response.send_message("⚠️ This channel has reached the maximum pin limit (50)! Unpin some messages first! 📌", ephemeral=True)
+        return
+    
+    try:
+        # Pin the message
+        reason = f"Pinned by {interaction.user} ({interaction.user.id}) via context menu"
+        await message.pin(reason=reason)
+        
+        # Create success embed
+        embed = discord.Embed(
+            title="📌 Message Successfully Pinned!",
+            description=f"🎯 **STICK ACTIVATED!** Message has been permanently attached to this channel! 🔗\n\n"
+                       f"**Message Author:** {message.author.mention}\n"
+                       f"**Pinned By:** {interaction.user.mention}\n"
+                       f"**Method:** Right-click context menu\n"
+                       f"**Channel:** {interaction.channel.mention}",
+            color=0x00FF00
+        )
+        
+        # Add message preview (truncated if too long)
+        message_content = message.content if message.content else "[No text content]"
+        if len(message_content) > 200:
+            message_content = message_content[:200] + "..."
+        
+        embed.add_field(
+            name="📝 Message Preview",
+            value=f"```{message_content}```",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 Pin Stats", 
+            value=f"Total pins in channel: {len(pins) + 1}/50", 
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔗 Quick Access",
+            value=f"[Jump to pinned message]({message.jump_url})",
+            inline=True
+        )
+        
+        embed.set_footer(text="Easy pinning via right-click context menu! ⚡")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ I don't have permission to pin messages in this channel! Ask an admin to fix my permissions! 🔧", ephemeral=True)
+    except discord.HTTPException as e:
+        if "Maximum number of pins reached" in str(e):
+            await interaction.response.send_message("⚠️ Maximum pins reached (50)! Unpin some old ones first! 📌", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Failed to pin message! Error: {str(e)} 🤖", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Something went wrong! Error: {str(e)} 🤪", ephemeral=True)
+
 # Auto-Moderation Commands
 @tree.command(name='automod', description='Configure auto-moderation settings 🤖')
 @app_commands.describe(
@@ -2462,6 +2691,7 @@ async def help_slash(interaction: discord.Interaction):
               "`/warnings @user` - View user's warning history\n"
               "`/clearwarnings @user` - Clear all warnings for user\n"
               "`/purge [amount]` - Clean up the mess\n"
+              "`/stick [message_id] [reason]` - Pin messages to channel (reply to message or use ID)\n"
               "`/slowmode [seconds]` - Control the yapping speed\n"
               "`/lockdown` - Emergency lockdown with REAL security restrictions\n"
               "`/unlock` - Lift lockdown and restore server freedom\n"
@@ -4032,10 +4262,7 @@ async def ghost_mode_command(interaction: discord.Interaction, user: discord.Mem
 # 🛡️ ADVANCED MODERATION TOOLS 🛡️
 
 # Storage for moderation configurations
-autorole_config = {}  # {guild_id: {'roles': [role_ids], 'channel': channel_id}}
-raid_protection_config = {}  # {guild_id: {'enabled': bool, 'threshold': int, 'action': str}}
-verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
-ticket_config = {}  # {guild_id: {'category': category_id, 'staff_role': role_id}}
+# Moved these to the main config section above - no duplicates needed
 
 @tree.command(name='autorole', description='🎭 Configure automatic role assignment for new members')
 @app_commands.describe(
@@ -4280,6 +4507,7 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
             'role': role.id,
             'channel': channel.id if channel else None
         }
+        auto_save_config('verification')  # Save immediately
         
         embed = discord.Embed(
             title="✅ VERIFICATION SYSTEM ACTIVATED!",
@@ -4300,6 +4528,7 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
     elif action.lower() == 'disable':
         if guild_id in verification_config:
             del verification_config[guild_id]
+            auto_save_config('verification')  # Save immediately
             await interaction.response.send_message("🚫 Verification system DISABLED! Your server is now giving open-door energy! 🚪", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Verification wasn't even enabled! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
@@ -4360,6 +4589,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             'staff_role': staff_role.id if staff_role else None,
             'panel_channel': panel_channel.id
         }
+        auto_save_config('ticket')  # Save immediately
         
         # Send setup confirmation to admin
         setup_embed = discord.Embed(
@@ -4454,6 +4684,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
     elif action.lower() == 'disable':
         if guild_id in ticket_config:
             del ticket_config[guild_id]
+            auto_save_config('ticket')  # Save immediately
             await interaction.response.send_message("🚫 Ticket system DISABLED! Customer service is now giving offline energy! 📴", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Ticket system wasn't even enabled! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
@@ -5245,6 +5476,7 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
             'role': verified_role.id,
             'channel': verify_channel.id
         }
+        auto_save_config('verification')  # Save immediately
         
         # Send setup confirmation to admin
         setup_embed = discord.Embed(
@@ -6177,10 +6409,17 @@ if __name__ == "__main__":
     logger.info("🚀 Initializing Goofy Mod Bot for hosting...")
 
     # Validate token with multiple environment variable names for hosting compatibility
+    # Debug environment variables
+    logger.info("🔍 Checking for Discord token in environment...")
+    all_env_vars = dict(os.environ)
+    discord_vars = {k: ('***' if v else 'EMPTY') for k, v in all_env_vars.items() if 'DISCORD' in k.upper() or 'TOKEN' in k.upper()}
+    logger.info(f"Found environment variables: {discord_vars}")
+    
     token = os.getenv('DISCORD_TOKEN') or os.getenv('BOT_TOKEN') or os.getenv('TOKEN') or os.getenv('DISCORD_BOT_TOKEN')
     if not token:
         logger.error("❌ No bot token found! Please set DISCORD_TOKEN in your environment variables!")
         logger.error("Supported environment variable names: DISCORD_TOKEN, BOT_TOKEN, TOKEN, DISCORD_BOT_TOKEN")
+        logger.error("If you're running on Replit, make sure your secret is properly set.")
         exit(1)
     
     logger.info("✅ Discord token found and loaded successfully!")
