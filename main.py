@@ -307,12 +307,14 @@ guild_level_config = {}
 
 # Database configuration and fallback to JSON
 DATABASE_URL = os.getenv('DATABASE_URL')
-USE_DATABASE = DATABASE_URL is not None
+USE_DATABASE = DATABASE_URL is not None and DATABASE_URL.strip() != ""
 engine = None
 
+# For deployment environments, ensure we have a database
 if USE_DATABASE:
     try:
-        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        logger.info(f"🔗 Connecting to database... (URL: {DATABASE_URL[:30]}...)")
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -322,6 +324,8 @@ if USE_DATABASE:
         logger.info("📁 Falling back to JSON file storage")
         USE_DATABASE = False
         engine = None
+else:
+    logger.info("📁 No database URL found, using JSON file storage")
 
 # All bot configuration storage with persistent storage (database or JSON fallback)
 verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
@@ -420,7 +424,8 @@ def load_config(config_type):
                 """), {"config_type": config_type})
                 row = result.fetchone()
                 if row:
-                    data = json.loads(row[0])
+                    # row[0] is already a dict if stored as JSONB, no need to parse
+                    data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
                     logger.debug(f"✅ Loaded {config_type} configuration from database")
                     return data
                 else:
