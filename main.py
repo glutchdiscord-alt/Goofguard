@@ -537,6 +537,7 @@ class GoofyMod(discord.Client):
         load_user_data()
         load_level_config()
         load_all_configs()  # Load all bot configurations from persistent storage
+        load_sticky_config()  # Load sticky message configurations
         self.update_status.start()
         # Start hourly backup system
         self.auto_backup_configs.start()
@@ -615,6 +616,36 @@ class GoofyMod(discord.Client):
         logger.info(f"😢 Left server: {guild.name}")
 
 
+    async def on_message(self, message):
+        """Handle sticky message maintenance and other message events"""
+        if message.author.bot:
+            return  # Skip bot messages to prevent loops
+        
+        # Check if this channel has a sticky message
+        guild_id = str(message.guild.id)
+        channel_id = str(message.channel.id)
+        
+        if guild_id in sticky_messages and channel_id in sticky_messages[guild_id]:
+            sticky_info = sticky_messages[guild_id][channel_id]
+            
+            try:
+                # Delete the old sticky message
+                try:
+                    old_sticky = await message.channel.fetch_message(sticky_info['message_id'])
+                    await old_sticky.delete()
+                except (discord.NotFound, discord.Forbidden):
+                    pass  # Message already deleted or no permissions
+                
+                # Repost the sticky message
+                new_sticky = await message.channel.send(sticky_info['content'])
+                
+                # Update the stored message ID
+                sticky_messages[guild_id][channel_id]['message_id'] = new_sticky.id
+                save_sticky_config()
+                
+            except Exception as e:
+                logger.error(f"Error maintaining sticky message: {e}")
+
     async def on_member_join(self, member):
         """Handle new member joins with goofy welcome messages and automatic verification"""
         if member.bot:
@@ -643,34 +674,35 @@ class GoofyMod(discord.Client):
                     description=f"YO {member.name}! Welcome to **{member.guild.name}**! 🔥\n\n"
                                f"But hold up bestie... we gotta make sure you're human first! 🤖\n\n"
                                f"🔒 **VERIFICATION REQUIRED** 🔒\n"
-                               f"Complete this captcha to prove you're not a bot!",
+                               f"Use the `/verify` command below to prove you're not a bot!",
                     color=0x3498DB
                 )
                 
                 captcha_embed.add_field(
                     name="🔢 Your Captcha Code",
-                    value=f"`{captcha_code}`\n\n**TYPE THIS EXACT NUMBER**\n"
-                          f"Don't copy-paste - type it manually to prove you're human! 🧠",
+                    value=f"`{captcha_code}`\n\n**USE THIS COMMAND:** `/verify {captcha_code}`\n"
+                          f"Copy this EXACT command and use it in this DM! 🧠",
                     inline=False
                 )
                 
                 captcha_embed.add_field(
                     name="📝 Instructions",
-                    value="• Type the 3-digit number exactly as shown above\n"
+                    value="• Use this command in this DM: `/verify (your code)`\n"
+                          "• For example: `/verify 123` (replace 123 with your code)\n"
                           "• You have 3 attempts to get it right\n"
-                          "• No copy-pasting allowed (it won't work!)\n"
-                          "• Reply in this DM with JUST the number",
+                          "• Type the code manually, don't copy-paste!",
                     inline=False
                 )
                 
                 captcha_embed.add_field(
                     name="❓ Need Help?",
-                    value=f"If you're having trouble, ask a staff member in **{member.guild.name}**!\n"
-                          f"Make sure your DMs are open to server members! 📬",
+                    value=f"• **Can't find `/verify` command?** Make sure slash commands are enabled!\n"
+                          f"• **Still stuck?** Ask a staff member in **{member.guild.name}**!\n"
+                          f"• **Simple process:** Just copy and use the command above! 📬",
                     inline=False
                 )
                 
-                captcha_embed.set_footer(text="Ohio-grade security keeping the bots out! 🛡️")
+                captcha_embed.set_footer(text="Just use the /verify command with your code - it's that simple! 🛡️")
                 
                 # Try to send the captcha DM
                 try:
@@ -1623,171 +1655,198 @@ async def purge_slash(interaction: discord.Interaction, amount: int = 10):
     except Exception as e:
         await interaction.followup.send(f"Cleaning machine broke! Error: {str(e)} 🤖", ephemeral=True)
 
-@tree.command(name='stick', description='Pin a message to the channel 📌')
-@app_commands.describe(
-    message_id='ID of message to pin (required)',
-    reason='Reason for pinning (optional)'
-)
-async def stick_slash(interaction: discord.Interaction, message_id: str = None, reason: str = "Important message"):
-    # Check permissions
-    if not interaction.user.guild_permissions.manage_messages:
-        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
-        return
-    
-    # Try to find the message to pin
-    message_to_pin = None
-    
-    # For slash commands, we can only work with message_id parameter
-    # (Reply functionality doesn't work with slash commands)
-    if message_id:
-        # Try to get message by ID
-        try:
-            message_to_pin = await interaction.channel.fetch_message(int(message_id))
-        except ValueError:
-            await interaction.response.send_message("❌ Invalid message ID! Make sure it's a number! 🔢", ephemeral=True)
-            return
-        except discord.NotFound:
-            await interaction.response.send_message("❌ Can't find a message with that ID in this channel! 🔍", ephemeral=True)
-            return
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ I don't have permission to access that message! 🚫", ephemeral=True)
-            return
-    else:
-        await interaction.response.send_message("❌ You need to provide a message ID to pin!\n\n**Usage:**\n• `/stick [message_id]`\n• Or right-click a message → Apps → Stick Message (context menu)", ephemeral=True)
-        return
-    
-    # Check if message is already pinned
-    if message_to_pin.pinned:
-        await interaction.response.send_message(f"📌 That message is already pinned bestie! No need to stick it twice! ✨", ephemeral=True)
-        return
-    
-    # Check pin limit (Discord allows max 50 pins per channel)
-    pins = await interaction.channel.pins()
-    if len(pins) >= 50:
-        await interaction.response.send_message("⚠️ This channel has reached the maximum pin limit (50)! Unpin some messages first! 📌", ephemeral=True)
-        return
-    
-    try:
-        # Pin the message
-        await message_to_pin.pin(reason=f"Pinned by {interaction.user} ({interaction.user.id}): {reason}")
-        
-        # Create success embed
-        embed = discord.Embed(
-            title="📌 Message Successfully Pinned!",
-            description=f"🎯 **STICK ACTIVATED!** Message has been permanently attached to this channel! 🔗\n\n"
-                       f"**Message Author:** {message_to_pin.author.mention}\n"
-                       f"**Pinned By:** {interaction.user.mention}\n"
-                       f"**Reason:** {reason}\n"
-                       f"**Channel:** {interaction.channel.mention}",
-            color=0x00FF00
-        )
-        
-        # Add message preview (truncated if too long)
-        message_content = message_to_pin.content if message_to_pin.content else "[No text content]"
-        if len(message_content) > 200:
-            message_content = message_content[:200] + "..."
-        
-        embed.add_field(
-            name="📝 Message Preview",
-            value=f"```{message_content}```",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📊 Pin Stats", 
-            value=f"Total pins in channel: {len(pins) + 1}/50", 
-            inline=True
-        )
-        
-        embed.add_field(
-            name="🔗 Quick Access",
-            value=f"[Jump to pinned message]({message_to_pin.jump_url})",
-            inline=True
-        )
-        
-        embed.set_footer(text="Pro tip: Right-click messages and use context menu for easy pinning!")
-        
-        await interaction.response.send_message(embed=embed)
-        
-    except discord.Forbidden:
-        await interaction.response.send_message("❌ I don't have permission to pin messages in this channel! Ask an admin to fix my permissions! 🔧", ephemeral=True)
-    except discord.HTTPException as e:
-        if "Maximum number of pins reached" in str(e):
-            await interaction.response.send_message("⚠️ Maximum pins reached (50)! Unpin some old ones first! 📌", ephemeral=True)
-        else:
-            await interaction.response.send_message(f"❌ Failed to pin message! Error: {str(e)} 🤖", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Something went wrong! Error: {str(e)} 🤪", ephemeral=True)
+# Old pin-based stick command removed - replaced with sticky message system below
 
-# Context menu command for right-clicking messages to pin them
-@tree.context_menu(name='Stick Message')
+# Sticky message system storage
+sticky_messages = {}  # {guild_id: {channel_id: {'content': str, 'message_id': int, 'author': user_id}}}
+
+def save_sticky_config():
+    """Save sticky message configuration"""
+    try:
+        with open('sticky_messages.json', 'w') as f:
+            json.dump(sticky_messages, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save sticky config: {e}")
+
+def load_sticky_config():
+    """Load sticky message configuration"""
+    global sticky_messages
+    try:
+        if os.path.exists('sticky_messages.json'):
+            with open('sticky_messages.json', 'r') as f:
+                sticky_messages = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load sticky config: {e}")
+        sticky_messages = {}
+
+# Context menu command for making messages sticky
+@tree.context_menu(name='Make Sticky')
 async def stick_context_menu(interaction: discord.Interaction, message: discord.Message):
     # Check permissions
     if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
     
-    # Check if message is already pinned
-    if message.pinned:
-        await interaction.response.send_message(f"📌 That message is already pinned bestie! No need to stick it twice! ✨", ephemeral=True)
-        return
+    guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
     
-    # Check pin limit (Discord allows max 50 pins per channel)
-    pins = await interaction.channel.pins()
-    if len(pins) >= 50:
-        await interaction.response.send_message("⚠️ This channel has reached the maximum pin limit (50)! Unpin some messages first! 📌", ephemeral=True)
+    # Initialize guild and channel in sticky config
+    if guild_id not in sticky_messages:
+        sticky_messages[guild_id] = {}
+    
+    # Check if this channel already has a sticky message
+    if channel_id in sticky_messages[guild_id]:
+        await interaction.response.send_message("⚠️ This channel already has a sticky message! Use `/unstick` to remove it first! 📌", ephemeral=True)
         return
     
     try:
-        # Pin the message
-        reason = f"Pinned by {interaction.user} ({interaction.user.id}) via context menu"
-        await message.pin(reason=reason)
+        # Create sticky message content
+        sticky_content = f"**Stickied Message:**\n\n{message.content}"
+        if message.attachments:
+            sticky_content += f"\n\n📎 *[Original message had {len(message.attachments)} attachment(s)]*"
         
-        # Create success embed
+        # Send the sticky message
+        sticky_msg = await interaction.channel.send(sticky_content)
+        
+        # Store sticky message info
+        sticky_messages[guild_id][channel_id] = {
+            'content': sticky_content,
+            'message_id': sticky_msg.id,
+            'author': interaction.user.id,
+            'original_author': message.author.id
+        }
+        save_sticky_config()
+        
+        # Success response
         embed = discord.Embed(
-            title="📌 Message Successfully Pinned!",
-            description=f"🎯 **STICK ACTIVATED!** Message has been permanently attached to this channel! 🔗\n\n"
-                       f"**Message Author:** {message.author.mention}\n"
-                       f"**Pinned By:** {interaction.user.mention}\n"
-                       f"**Method:** Right-click context menu\n"
+            title="📌 Sticky Message Created!",
+            description=f"🎯 **STICKY ACTIVATED!** This message will now stay at the bottom of the channel! 📍\n\n"
+                       f"**Original Author:** {message.author.mention}\n"
+                       f"**Made Sticky By:** {interaction.user.mention}\n"
                        f"**Channel:** {interaction.channel.mention}",
             color=0x00FF00
         )
         
-        # Add message preview (truncated if too long)
-        message_content = message.content if message.content else "[No text content]"
-        if len(message_content) > 200:
-            message_content = message_content[:200] + "..."
-        
         embed.add_field(
-            name="📝 Message Preview",
-            value=f"```{message_content}```",
+            name="💡 How it works",
+            value="• The message will automatically repost when new messages appear\n"
+                  "• It stays at the bottom of the channel for visibility\n"
+                  "• Use `/unstick` to remove it when no longer needed",
             inline=False
         )
         
-        embed.add_field(
-            name="📊 Pin Stats", 
-            value=f"Total pins in channel: {len(pins) + 1}/50", 
-            inline=True
-        )
-        
-        embed.add_field(
-            name="🔗 Quick Access",
-            value=f"[Jump to pinned message]({message.jump_url})",
-            inline=True
-        )
-        
-        embed.set_footer(text="Easy pinning via right-click context menu! ⚡")
+        embed.set_footer(text="Sticky message system keeping important info visible! 📍")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
         
     except discord.Forbidden:
-        await interaction.response.send_message("❌ I don't have permission to pin messages in this channel! Ask an admin to fix my permissions! 🔧", ephemeral=True)
-    except discord.HTTPException as e:
-        if "Maximum number of pins reached" in str(e):
-            await interaction.response.send_message("⚠️ Maximum pins reached (50)! Unpin some old ones first! 📌", ephemeral=True)
-        else:
-            await interaction.response.send_message(f"❌ Failed to pin message! Error: {str(e)} 🤖", ephemeral=True)
+        await interaction.response.send_message("❌ I don't have permission to send messages in this channel! 🚫", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Something went wrong! Error: {str(e)} 🤪", ephemeral=True)
+
+@tree.command(name='unstick', description='Remove the sticky message from this channel 🗑️')
+async def unstick_slash(interaction: discord.Interaction):
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
+    
+    # Check if there's a sticky message
+    if guild_id not in sticky_messages or channel_id not in sticky_messages[guild_id]:
+        await interaction.response.send_message("❌ There's no sticky message in this channel! 🤷‍♂️", ephemeral=True)
+        return
+    
+    try:
+        # Try to delete the current sticky message
+        sticky_info = sticky_messages[guild_id][channel_id]
+        try:
+            sticky_msg = await interaction.channel.fetch_message(sticky_info['message_id'])
+            await sticky_msg.delete()
+        except (discord.NotFound, discord.Forbidden):
+            pass  # Message already deleted or no permissions
+        
+        # Remove from config
+        del sticky_messages[guild_id][channel_id]
+        if not sticky_messages[guild_id]:  # Remove guild if no more sticky messages
+            del sticky_messages[guild_id]
+        save_sticky_config()
+        
+        embed = discord.Embed(
+            title="🗑️ Sticky Message Removed!",
+            description="The sticky message has been removed from this channel! 📍",
+            color=0xFF6B35
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error removing sticky message: {str(e)} 🤪", ephemeral=True)
+
+@tree.command(name='stick', description='Create a sticky message that stays at bottom of channel 📍')
+@app_commands.describe(
+    message='The message content to stick',
+    reason='Reason for creating sticky message (optional)'
+)
+async def stick_slash(interaction: discord.Interaction, message: str, reason: str = "Important information"):
+    # Check permissions
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
+    
+    # Initialize guild and channel in sticky config
+    if guild_id not in sticky_messages:
+        sticky_messages[guild_id] = {}
+    
+    # Check if this channel already has a sticky message
+    if channel_id in sticky_messages[guild_id]:
+        await interaction.response.send_message("⚠️ This channel already has a sticky message! Use `/unstick` to remove it first! 📌", ephemeral=True)
+        return
+    
+    try:
+        # Create sticky message content
+        sticky_content = f"**Stickied Message:**\n\n{message}"
+        
+        # Send the sticky message
+        sticky_msg = await interaction.channel.send(sticky_content)
+        
+        # Store sticky message info
+        sticky_messages[guild_id][channel_id] = {
+            'content': sticky_content,
+            'message_id': sticky_msg.id,
+            'author': interaction.user.id,
+            'reason': reason
+        }
+        save_sticky_config()
+        
+        # Success response
+        embed = discord.Embed(
+            title="📍 Sticky Message Created!",
+            description=f"🎯 **STICKY ACTIVATED!** This message will now stay at the bottom of the channel!\n\n"
+                       f"**Created By:** {interaction.user.mention}\n"
+                       f"**Reason:** {reason}\n"
+                       f"**Channel:** {interaction.channel.mention}",
+            color=0x00FF00
+        )
+        
+        embed.add_field(
+            name="💡 How it works",
+            value="• The message will automatically repost when new messages appear\n"
+                  "• It stays at the bottom of the channel for visibility\n"
+                  "• Use `/unstick` to remove it when no longer needed",
+            inline=False
+        )
+        
+        embed.set_footer(text="Sticky message system keeping important info visible! 📍")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ I don't have permission to send messages in this channel! 🚫", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ Something went wrong! Error: {str(e)} 🤪", ephemeral=True)
 
@@ -5661,7 +5720,7 @@ async def verify_slash(interaction: discord.Interaction, code: str):
     if code.upper() == correct_code.upper():
         # SUCCESS! Verification complete
         guild_id = str(verification_data['guild_id'])
-        guild = interaction.guild
+        guild = bot.get_guild(verification_data['guild_id'])
         
         # Give verified role if verification system is enabled
         if guild_id in verification_config:
@@ -5670,13 +5729,20 @@ async def verify_slash(interaction: discord.Interaction, code: str):
             
             if verified_role:
                 try:
-                    await interaction.user.add_roles(verified_role, reason="✅ Captcha verification successful!")
+                    # Get the member object from the guild (since we're in DMs)
+                    member = guild.get_member(interaction.user.id)
+                    if member:
+                        await member.add_roles(verified_role, reason="✅ Captcha verification successful!")
+                    else:
+                        await interaction.response.send_message("❌ Error: Could not find you in the server! You might have left! 😅", ephemeral=True)
+                        return
                 except discord.Forbidden:
                     await interaction.response.send_message("✅ Verification successful but I couldn't give you the role! Ask an admin to fix my permissions! 😅", ephemeral=True)
                     return
         
-        # Remove from pending
+        # Remove from pending and save config
         del pending_verifications[user_id]
+        auto_save_config('pending_verifications')
         
         success_responses = [
             "🎉 **HUMAN VERIFICATION COMPLETE!** Welcome to the elite human club bestie! 🧠",
