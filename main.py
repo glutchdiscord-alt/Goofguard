@@ -292,6 +292,14 @@ WSGIRequestHandler.log_request = lambda self, code='-', size='-': None
 user_levels = {}
 guild_level_config = {}
 
+# Storage for verification configs
+verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
+pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
+
+# Storage for custom ticket panel configurations
+ticket_panel_config = {}  # {guild_id: {'title': str, 'description': str, 'color': int, 'button_text': str, 'button_emoji': str, 'categories': list}}
+ticket_config = {}  # {guild_id: {'category': category_id, 'staff_role': role_id}}
+
 def load_user_data():
     """Load user level data from JSON file"""
     global user_levels
@@ -4263,21 +4271,52 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
         else:
             # Use default description with categories
             if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
-                categories_text = "\\n".join([f"{cat['emoji']} **{cat['label']}** - {cat['description']}" for cat in ticket_panel_config[guild_id]['categories']])
+                categories_text = "\n".join([f"{cat['emoji']} **{cat['label']}** - {cat['description']}" for cat in ticket_panel_config[guild_id]['categories']])
             else:
-                categories_text = ("💡 **General Support** - Questions and general help\\n"
-                                 "🐞 **Bug Reports** - Found something broken? Let us know!\\n"
-                                 "👥 **Account Issues** - Problems with roles or permissions\\n"
-                                 "❓ **Server Questions** - Rules, features, and server info\\n"
-                                 "🚨 **Report User/Content** - Report inappropriate behavior\\n"
-                                 "💫 **Other Issues** - Anything else you need help with!")\n            \n            panel_embed = discord.Embed(
+                categories_text = ("💡 **General Support** - Questions and general help\n"
+                                 "🐞 **Bug Reports** - Found something broken? Let us know!\n"
+                                 "👥 **Account Issues** - Problems with roles or permissions\n"
+                                 "❓ **Server Questions** - Rules, features, and server info\n"
+                                 "🚨 **Report User/Content** - Report inappropriate behavior\n"
+                                 "💫 **Other Issues** - Anything else you need help with!")
+            
+            panel_embed = discord.Embed(
                 title=panel_title,
-                description="**Need help? Create a support ticket!** 🚀\\n\\n"
-                           "Click the button below to start the process! Our staff team is here to help with:\\n\\n"
-                           f"{categories_text}\\n\\n"
+                description="**Need help? Create a support ticket!** 🚀\n\n"
+                           "Click the button below to start the process! Our staff team is here to help with:\n\n"
+                           f"{categories_text}\n\n"
                            "**Your ticket will be private** - only you and staff can see it! 🔒",
                 color=panel_color
-            )\n        \n        panel_embed.add_field(\n            name=\"📝 How it works\",\n            value=\"1️⃣ Click the **Create Ticket** button below\\n\"\n                  \"2️⃣ Select your issue type from the dropdown\\n\"\n                  \"3️⃣ A private channel will be created for you\\n\"\n                  \"4️⃣ Explain your issue and get help from staff!\\n\"\n                  \"5️⃣ Close your ticket when resolved!\",\n            inline=False\n        )\n        \n        panel_embed.add_field(\n            name=\"⚡ Pro Tips\",\n            value=\"• Be specific about your issue for faster help!\\n\"\n                  \"• Include screenshots when helpful!\\n\"\n                  \"• One ticket per issue for better organization!\\n\"\n                  \"• Be patient - staff will respond ASAP!\",\n            inline=False\n        )\n        \n        panel_embed.set_footer(text=\"Customer support that's absolutely BUSSIN! 🔥\")\n        \n        # Create the persistent view with buttons\n        panel_view = TicketPanelView(guild_id)\n        \n        try:\n            await panel_channel.send(embed=panel_embed, view=panel_view)\n        except Exception as e:\n            logger.error(f\"Failed to send ticket panel: {e}\")"
+            )
+        
+        panel_embed.add_field(
+            name="📝 How it works",
+            value="1️⃣ Click the **Create Ticket** button below\n"
+                  "2️⃣ Select your issue type from the dropdown\n"
+                  "3️⃣ A private channel will be created for you\n"
+                  "4️⃣ Explain your issue and get help from staff!\n"
+                  "5️⃣ Close your ticket when resolved!",
+            inline=False
+        )
+        
+        panel_embed.add_field(
+            name="⚡ Pro Tips",
+            value="• Be specific about your issue for faster help!\n"
+                  "• Include screenshots when helpful!\n"
+                  "• One ticket per issue for better organization!\n"
+                  "• Be patient - staff will respond ASAP!",
+            inline=False
+        )
+        
+        panel_embed.set_footer(text="Customer support that's absolutely BUSSIN! 🔥")
+        
+        # Create the persistent view with buttons
+        panel_view = TicketPanelView(guild_id)
+        
+        try:
+            await panel_channel.send(embed=panel_embed, view=panel_view)
+        except Exception as e:
+            logger.error(f"Failed to send ticket panel: {e}")
         
     elif action.lower() == 'disable':
         if guild_id in ticket_config:
@@ -5045,13 +5084,6 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
         await interaction.followup.send(f"💥 DM MACHINE BROKE! Error during mass DM: {str(e)} 📬💀")
 
 # 🛡️ VERIFICATION & SECURITY SYSTEMS 🛡️
-
-# Storage for verification configs
-verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
-pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
-
-# Storage for custom ticket panel configurations
-ticket_panel_config = {}  # {guild_id: {'title': str, 'description': str, 'color': int, 'button_text': str, 'button_emoji': str, 'categories': list}}
 
 @tree.command(name='verify-setup', description='🛡️ Setup verification system for server security')
 @app_commands.describe(
