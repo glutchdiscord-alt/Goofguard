@@ -6,7 +6,17 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     envVars:
-      - key: DISCORD_BOT_TOKEN
+      - key: DISCORD_TOKEN
         sync: false  # Set this manually in Render dashboard
+      - key: DATABASE_URL
+        fromDatabase:
+          name: goofy-mod-db
+          property: connectionString
     autoDeploy: true
     preDeployCommand: echo "Deploying Goofy Mod Bot with maximum brainrot energy!"
+    
+databases:
+  - name: goofy-mod-db
+    databaseName: goofy_mod_bot
+    user: bot_user
+    plan: free
