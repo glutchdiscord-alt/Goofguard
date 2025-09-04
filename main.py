@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 from flask import Flask
 import threading
 from werkzeug.serving import WSGIRequestHandler
+import sqlalchemy
+from sqlalchemy import create_engine, text
+import psycopg2
 
 # Load environment variables
 load_dotenv()
@@ -302,7 +305,25 @@ WSGIRequestHandler.log_request = lambda self, code='-', size='-': None
 user_levels = {}
 guild_level_config = {}
 
-# All bot configuration storage with persistent JSON files
+# Database configuration and fallback to JSON
+DATABASE_URL = os.getenv('DATABASE_URL')
+USE_DATABASE = DATABASE_URL is not None
+engine = None
+
+if USE_DATABASE:
+    try:
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        # Test connection
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("🗄️ Database connection established and verified!")
+    except Exception as e:
+        logger.error(f"❌ Database connection failed: {e}")
+        logger.info("📁 Falling back to JSON file storage")
+        USE_DATABASE = False
+        engine = None
+
+# All bot configuration storage with persistent storage (database or JSON fallback)
 verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
 pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
 ticket_panel_config = {}  # {guild_id: {'title': str, 'description': str, 'color': int, 'button_text': str, 'button_emoji': str, 'categories': list}}
@@ -320,44 +341,102 @@ CONFIG_FILES = {
     'raid_protection': 'raid_protection_config.json'
 }
 
-def save_config(config_type, data=None):
-    """Save specific configuration to JSON file"""
+def init_database():
+    """Initialize database tables for persistent storage"""
+    if not USE_DATABASE or not engine:
+        return False
+    
     try:
-        if config_type not in CONFIG_FILES:
-            logger.error(f"Unknown config type: {config_type}")
-            return False
+        with engine.connect() as conn:
+            # Create bot_config table for all configurations
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS bot_config (
+                    id SERIAL PRIMARY KEY,
+                    config_type VARCHAR(50) NOT NULL,
+                    guild_id VARCHAR(20),
+                    data JSONB NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            
+            # Create unique index to prevent duplicates
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS bot_config_unique 
+                ON bot_config (config_type, COALESCE(guild_id, 'global'))
+            """))
+            
+            conn.commit()
+            logger.info("📋 Database tables initialized successfully!")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        return False
 
-        filename = CONFIG_FILES[config_type]
-
+def save_config(config_type, data=None):
+    """Save specific configuration to database or JSON file"""
+    try:
         # Get the data from globals if not provided
         if data is None:
             data = globals().get(f"{config_type}_config", {})
-
-        with open(filename, 'w') as f:
-            json.dump(data, f, indent=2)
-        logger.debug(f"✅ Saved {config_type} configuration to {filename}")
+        
+        if USE_DATABASE and engine:
+            # Save to database
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO bot_config (config_type, data) 
+                    VALUES (:config_type, :data)
+                    ON CONFLICT ON CONSTRAINT bot_config_unique
+                    DO UPDATE SET data = :data, updated_at = NOW()
+                """), {"config_type": config_type, "data": json.dumps(data)})
+                conn.commit()
+            logger.debug(f"✅ Saved {config_type} configuration to database")
+        else:
+            # Fallback to JSON file
+            if config_type not in CONFIG_FILES:
+                logger.error(f"Unknown config type: {config_type}")
+                return False
+            filename = CONFIG_FILES[config_type]
+            with open(filename, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug(f"✅ Saved {config_type} configuration to {filename}")
         return True
     except Exception as e:
         logger.error(f"❌ Failed to save {config_type} config: {e}")
         return False
 
 def load_config(config_type):
-    """Load specific configuration from JSON file"""
+    """Load specific configuration from database or JSON file"""
     try:
-        if config_type not in CONFIG_FILES:
-            logger.error(f"Unknown config type: {config_type}")
-            return {}
-
-        filename = CONFIG_FILES[config_type]
-
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                data = json.load(f)
-                logger.debug(f"✅ Loaded {config_type} configuration from {filename}")
-                return data
+        if USE_DATABASE and engine:
+            # Load from database
+            with engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT data FROM bot_config 
+                    WHERE config_type = :config_type
+                """), {"config_type": config_type})
+                row = result.fetchone()
+                if row:
+                    data = json.loads(row[0])
+                    logger.debug(f"✅ Loaded {config_type} configuration from database")
+                    return data
+                else:
+                    logger.info(f"📋 No existing {config_type} config in database, starting fresh")
+                    return {}
         else:
-            logger.info(f"📁 No existing {config_type} config file found, starting fresh")
-            return {}
+            # Fallback to JSON file
+            if config_type not in CONFIG_FILES:
+                logger.error(f"Unknown config type: {config_type}")
+                return {}
+            filename = CONFIG_FILES[config_type]
+            if os.path.exists(filename):
+                with open(filename, 'r') as f:
+                    data = json.load(f)
+                    logger.debug(f"✅ Loaded {config_type} configuration from {filename}")
+                    return data
+            else:
+                logger.info(f"📁 No existing {config_type} config file found, starting fresh")
+                return {}
     except Exception as e:
         logger.error(f"❌ Failed to load {config_type} config: {e}")
         return {}
@@ -543,6 +622,11 @@ class GoofyMod(discord.Client):
     async def setup_hook(self):
         """Called when bot is starting up"""
         logger.info(f"🤪 {self.user} is getting ready to be goofy!")
+        
+        # Initialize database if available
+        if USE_DATABASE:
+            init_database()
+        
         # Load ALL persistent data on startup
         load_user_data()
         load_level_config()
@@ -2749,118 +2833,59 @@ async def main_character_moment_slash(interaction: discord.Interaction, user: di
 @tree.command(name='help', description='Show all available goofy commands 🤪')
 async def help_slash(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🤪 Goofy Mod Ultimate Command List!",
-        description="Here are all my chaotic powers using `/` commands!",
+        title="🤪 Goofy Mod Command List!",
+        description="Here are all my chaotic powers! Use `/tutorial` for detailed guides!",
         color=0xFF69B4
     )
 
     embed.add_field(
-        name="🔨 Moderation Commands (Mods Only)",
-        value="`/ban` - Ban someone to the shadow realm\n"
-              "`/kick` - Yeet someone out\n"
-              "`/mute [duration] [reason]` - Silence the chaos (5m, 2h, 1d or permanent)\n"
-              "`/unmute` - Restore their voice\n"
-              "`/warn` - Give a friendly warning (auto-tracks count)\n"
-              "`/unwarn [count]` - Remove specific number of warnings\n"
-              "`/warnings @user` - View user's warning history\n"
-              "`/clearwarnings @user` - Clear all warnings for user\n"
-              "`/purge [amount]` - Clean up the mess\n"
-              "`/stick [message_id] [reason]` - Pin messages to channel (reply to message or use ID)\n"
-              "`/slowmode [seconds]` - Control the yapping speed\n"
-              "`/lockdown` - Emergency lockdown with REAL security restrictions\n"
-              "`/unlock` - Lift lockdown and restore server freedom\n"
-              "`/auto-nick @user [nickname]` - Auto-change nicknames for rule breakers\n"
-              "`/ghost-mode @user` - Hide messages from users temporarily\n"
-              "`/reverse-day` - Flip all rules for 24 hours (chaos mode)\n"
-              "`/roleadd @role @user [reason]` - Give someone a role with sigma energy 🎭\n"
-              "`/massaddrole @role [exclude_bots] [reason]` - Give EVERYONE a role (CHAOS MODE) ⚠️\n"
-              "`/massdm @role [message] [exclude_bots]` - Send DMs to everyone with a role 📬",
-        inline=False
+        name="🔨 Moderation (Mods Only)",
+        value="`/ban` `/kick` `/mute` `/unmute` `/warn` `/unwarn`\n"
+              "`/warnings` `/purge` `/slowmode` `/lockdown` `/unlock`\n"
+              "`/roleadd` `/massaddrole` `/massdm` `/stick`",
+        inline=True
     )
 
     embed.add_field(
-        name="🤖 Auto-Moderation & Content Protection",
-        value="`/automod [feature] [enabled] [action] [max_warnings]` - Configure auto-mod with actions\n"
-              "• **Basic:** Spam, Caps, Mentions, Repeat Messages, Warning Escalation\n"
-              "• **Content:** Link Filter, Invite Blocker, NSFW Detection, File Scanner\n"
-              "• **Advanced:** External Emoji Block, Duplicate Messages\n"
-              "• **Actions:** Warn, Mute, Kick, Ban\n"
-              "`/automodstatus` - Check auto-mod settings",
-        inline=False
+        name="🤖 Auto-Moderation",
+        value="`/automod` - Configure spam/caps/content protection\n"
+              "`/automodstatus` - Check current settings\n"
+              "Actions: Warn, Mute, Kick, Ban",
+        inline=True
     )
 
     embed.add_field(
-        name="📈 Leveling System (Sigma Grindset)",
-        value="`/configlevel [enable/disable]` - Configure leveling system (admins only)\n"
-              "`/level [@user]` - Check your brainrot level and XP progress\n"
-              "`/leaderboard` - See top sigma grinders in the server\n\n"
-              "🔥 **How it works:** Send messages to gain XP and level up!\n"
-              "⚡ **Cooldown:** 1 minute between XP gains to prevent farming\n"
-              "🏆 **Titles:** From Grass Touching Rookie to Absolute Ohio Legend!",
-        inline=False
+        name="📈 Leveling System",
+        value="`/configlevel` - Enable/disable leveling\n"
+              "`/level` - Check XP progress\n"
+              "`/leaderboard` - Top users",
+        inline=True
     )
 
     embed.add_field(
-        name="🔥 Brainrot Fun Commands",
-        value="`/roast [@user]` - Ohio-level burns that hit different 💀\n"
-              "`/ratto [@user]` - Ultimate ratio weapon with skill issue energy\n"
-              "`/vibe-check [@user]` - Random vibe scores (0-100) with personality\n"
-              "`/touch-grass [@user]` - Grass touching therapy sessions\n"
-              "`/cringe-meter [@user]` - Cringe level analysis\n"
-              "`/ohio-translate [text]` - Convert normal text to pure brainrot\n"
-              "`/sus-scan [@user]` - Impostor detector with Among Us vibes\n"
-              "`/rizz-rating [@user]` - Rate anyone's rizz levels\n"
-              "`/random-fact [@user]` - Made-up facts about users\n"
-              "`/sigma-grindset` - Motivational quotes but brainrot",
-        inline=False
+        name="🔥 Brainrot Fun",
+        value="`/roast` `/ratto` `/vibe-check` `/touch-grass`\n"
+              "`/cringe-meter` `/ohio-translate` `/sus-scan`\n"
+              "`/rizz-rating` `/random-fact` `/sigma-grindset`",
+        inline=True
     )
 
     embed.add_field(
-        name="🎭 Chaos & Entertainment",
-        value="`/npc-mode [@user]` - Turn people into NPCs temporarily\n"
-              "`/main-character [@user]` - Give someone protagonist energy\n"
-              "`/plot-twist` - Random events that shake up the server\n"
-              "`/yapping-contest` - Track who can send the most messages\n"
-              "`/uno-reverse` - Reverse moderation actions with style\n"
-              "`/democracy @user [reason]` - Let server vote on punishments\n"
-              "`/random-mute` - Russian roulette but with mutes\n"
-              "`/warning-auction` - Bid to remove warnings with fake currency\n"
-              "`/chaos-wheel` - Spin for random consequences/rewards",
-        inline=False
+        name="🎭 Chaos & Games",
+        value="`/npc-mode` `/main-character` `/plot-twist`\n"
+              "`/coinflip` `/dice` `/ship` `/8ball` `/meme`\n"
+              "`/fact` `/chaos` `/challenge` `/poll`",
+        inline=True
     )
 
-    embed.add_field(
-        name="🎮 Classic Fun Commands",
-        value="`/8ball [question]` - Brainrot magic 8-ball\n"
-              "`/compliment @user` - Backhanded compliments\n"
-              "`/random` - Pick a random server member\n"
-              "`/fact` - Get random brainrot facts\n"
-              "`/chaos` - Unleash pure chaos energy\n"
-              "`/vibe [@user]` - Check vibe status\n"
-              "`/ratio @user` - Ratio someone (playfully)",
-        inline=False
-    )
+
 
     embed.add_field(
-        name="🎪 Games & Entertainment",
-        value="`/coinflip` - Chaotic coin flipping\n"
-              "`/dice [sides] [count]` - Roll dice with reactions\n"
-              "`/ship @user1 [@user2]` - Ship compatibility checker\n"
-              "`/meme [topic]` - Generate fresh memes\n"
-              "`/quote` - Inspirational quotes (chaotic edition)\n"
-              "`/pickup [@user]` - Terrible pickup lines\n"
-              "`/challenge` - Get random goofy challenges\n"
-              "`/poll [question] [options]` - Brainrot democracy in action",
-        inline=False
-    )
-
-    embed.add_field(
-        name="ℹ️ Info & Help Commands",
-        value="`/serverinfo` - Server stats with style\n"
-              "`/userinfo [@user]` - User profile with flair\n"
-              "`/help` - This chaotic help message\n"
-              "`/tutorial [command]` - Detailed setup guides for moderation features 📚",
-        inline=False
+        name="ℹ️ Info & Setup",
+        value="`/serverinfo` `/userinfo` `/help` `/tutorial`\n"
+              "`/verify-setup` `/configwelcomechannel`\n"
+              "`/autorole` `/configlevel`",
+        inline=True
     )
 
     embed.add_field(
@@ -2887,12 +2912,12 @@ async def help_slash(interaction: discord.Interaction):
 
     embed.add_field(
         name="🎭 About Me",
-        value="I'm your friendly neighborhood goofy moderator! "
-              "I keep servers fun while maintaining order with maximum brainrot energy! 🤡\n\n"
-              "✨ **Features:** Auto-responses, spam detection, and pure chaos!",
+        value="Your goofy mod bot with maximum brainrot energy!\n"
+              "Auto-responses, spam protection, and pure chaos! 🤡",
         inline=False
     )
 
+    embed.set_footer(text="Use /tutorial for detailed setup guides!")
     await interaction.response.send_message(embed=embed)
 
 # Additional fun commands
