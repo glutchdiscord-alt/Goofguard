@@ -1,5 +1,6 @@
 discord.py==2.6.3
 python-dotenv==1.1.1
-asyncio==4.0.0
 flask==3.0.0
-flask
+psycopg2-binary
+sqlalchemy
+werkzeug
