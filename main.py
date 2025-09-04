@@ -22,7 +22,7 @@ class TicketReasonSelect(discord.ui.Select):
     """Dropdown for selecting ticket reason with customizable categories"""
     def __init__(self, guild_id):
         self.guild_id = guild_id
-        
+
         # Get custom categories or use defaults
         if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
             custom_categories = ticket_panel_config[guild_id]['categories']
@@ -74,7 +74,7 @@ class TicketReasonSelect(discord.ui.Select):
                     value="other"
                 )
             ]
-        
+
         super().__init__(
             placeholder="What do you need help with? 🤔",
             min_values=1,
@@ -85,21 +85,21 @@ class TicketReasonSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         # Track if we've responded to avoid double responses
         responded = False
-        
+
         try:
             guild_id = str(interaction.guild.id)
-            
+
             if guild_id not in ticket_config:
                 await interaction.response.send_message("❌ Ticket system not enabled! This is some sus behavior... 🤔", ephemeral=True)
                 return
-                
+
             config = ticket_config[guild_id]
             category = interaction.guild.get_channel(config['category'])
-            
+
             if not category:
                 await interaction.response.send_message("❌ Ticket category was deleted! Ask an admin to reconfigure! 🗑️", ephemeral=True)
                 return
-            
+
             # Get reason description (check for custom categories first)
             if self.guild_id in ticket_panel_config and 'categories' in ticket_panel_config[self.guild_id]:
                 custom_categories = ticket_panel_config[self.guild_id]['categories']
@@ -114,31 +114,31 @@ class TicketReasonSelect(discord.ui.Select):
                     "report": "Report User/Content - Reporting inappropriate behavior!",
                     "other": "Other - Custom issue that needs attention!"
                 }
-            
+
             reason = reason_map.get(self.values[0], "General Support")
-            
+
             # Create ticket channel
             ticket_name = f"ticket-{interaction.user.name}-{int(time.time())}"
-            
+
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
-            
+
             # Add staff role if configured
             if config.get('staff_role'):
                 staff_role = interaction.guild.get_role(config['staff_role'])
                 if staff_role:
                     overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-            
+
             # Create the ticket channel
             ticket_channel = await category.create_text_channel(
                 name=ticket_name,
                 overwrites=overwrites,
                 reason=f"Support ticket created by {interaction.user}"
             )
-            
+
             # Create welcome message in ticket channel
             welcome_embed = discord.Embed(
                 title="🎫 SUPPORT TICKET ACTIVATED!",
@@ -148,7 +148,7 @@ class TicketReasonSelect(discord.ui.Select):
                            f"Describe your issue in detail and staff will help you out! ✨",
                 color=0x3498DB
             )
-            
+
             welcome_embed.add_field(
                 name="💡 Pro Tips",
                 value="• Be as detailed as possible about your issue!\n"
@@ -157,11 +157,11 @@ class TicketReasonSelect(discord.ui.Select):
                       "• Use `/ticket close` when your issue is resolved!",
                 inline=False
             )
-            
+
             welcome_embed.set_footer(text="Support powered by sigma grindset customer service! 💪")
-            
+
             await ticket_channel.send(embed=welcome_embed)
-            
+
             # Confirmation message to user
             success_embed = discord.Embed(
                 title="✅ TICKET CREATED SUCCESSFULLY!",
@@ -170,10 +170,10 @@ class TicketReasonSelect(discord.ui.Select):
                            f"Staff have been notified and will assist you shortly! 📢",
                 color=0x00FF00
             )
-            
+
             await interaction.response.send_message(embed=success_embed, ephemeral=True)
             responded = True
-            
+
         except Exception as e:
             logger.error(f"Error creating ticket: {e}")
             if not responded:
@@ -188,7 +188,7 @@ class TicketPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         self.add_item(TicketReasonSelect(guild_id))
-        
+
         # Get custom button settings or use defaults
         if guild_id in ticket_panel_config:
             button_text = ticket_panel_config[guild_id].get('button_text', 'Create Ticket')
@@ -196,7 +196,7 @@ class TicketPanelView(discord.ui.View):
         else:
             button_text = 'Create Ticket'
             button_emoji = '🎫'
-        
+
         # Update button dynamically
         self.create_ticket_button.label = button_text
         self.create_ticket_button.emoji = button_emoji
@@ -210,14 +210,14 @@ class TicketPanelView(discord.ui.View):
         # This sends an ephemeral message with the dropdown
         view = discord.ui.View()
         view.add_item(TicketReasonSelect(self.guild_id))
-        
+
         embed = discord.Embed(
             title="🎫 CREATE YOUR TICKET",
             description="Select what type of help you need from the dropdown below! 👇\n\n"
                        "Choose the option that best matches your situation! ✨",
             color=0x3498DB
         )
-        
+
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # Universal member validation function for hosting compatibility
@@ -225,11 +225,11 @@ async def validate_member(user, guild):
     """Validate and resolve member object for hosting environments"""
     if not user or not guild:
         return None
-    
+
     # If it's already a proper member object with the right guild, return it
     if isinstance(user, discord.Member) and user.guild == guild:
         return user
-    
+
     # Try to get fresh member data from Discord API for hosting environments
     try:
         if hasattr(user, 'id'):
@@ -237,7 +237,7 @@ async def validate_member(user, guild):
             member = guild.get_member(user.id)
             if member:
                 return member
-            
+
             # If not in cache, fetch from API
             try:
                 member = await guild.fetch_member(user.id)
@@ -247,7 +247,7 @@ async def validate_member(user, guild):
                 pass
     except Exception:
         pass
-    
+
     # If user is a User object, try to get the Member version
     if isinstance(user, discord.User):
         try:
@@ -260,7 +260,7 @@ async def validate_member(user, guild):
                 return member
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
-    
+
     return None
 
 # Non-async version for backwards compatibility
@@ -268,20 +268,20 @@ def validate_member_sync(user, guild):
     """Synchronous member validation - use validate_member when possible"""
     if not user or not guild:
         return None
-    
+
     if isinstance(user, discord.Member) and user.guild == guild:
         return user
-    
+
     if hasattr(user, 'id'):
         member = guild.get_member(user.id)
         if member:
             return member
-    
+
     if isinstance(user, discord.User):
         member = guild.get_member(user.id)
         if member:
             return member
-    
+
     return None
 
 # Configure logging for better hosting monitoring
@@ -326,13 +326,13 @@ def save_config(config_type, data=None):
         if config_type not in CONFIG_FILES:
             logger.error(f"Unknown config type: {config_type}")
             return False
-        
+
         filename = CONFIG_FILES[config_type]
-        
+
         # Get the data from globals if not provided
         if data is None:
             data = globals().get(f"{config_type}_config", {})
-        
+
         with open(filename, 'w') as f:
             json.dump(data, f, indent=2)
         logger.debug(f"✅ Saved {config_type} configuration to {filename}")
@@ -347,9 +347,9 @@ def load_config(config_type):
         if config_type not in CONFIG_FILES:
             logger.error(f"Unknown config type: {config_type}")
             return {}
-        
+
         filename = CONFIG_FILES[config_type]
-        
+
         if os.path.exists(filename):
             with open(filename, 'r') as f:
                 data = json.load(f)
@@ -366,14 +366,14 @@ def load_all_configs():
     """Load all bot configurations from files"""
     global verification_config, pending_verifications, ticket_panel_config
     global ticket_config, autorole_config, raid_protection_config
-    
+
     verification_config = load_config('verification')
     pending_verifications = load_config('pending_verifications')
     ticket_panel_config = load_config('ticket_panel')
     ticket_config = load_config('ticket')
     autorole_config = load_config('autorole')
     raid_protection_config = load_config('raid_protection')
-    
+
     logger.info("🔄 All bot configurations loaded from persistent storage")
 
 def save_all_configs():
@@ -384,7 +384,7 @@ def save_all_configs():
     save_config('ticket', ticket_config)
     save_config('autorole', autorole_config)
     save_config('raid_protection', raid_protection_config)
-    
+
     logger.info("💾 All bot configurations saved to persistent storage")
 
 def auto_save_config(config_type):
@@ -401,22 +401,22 @@ def create_backup():
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_dir = "config_backups"
-    
+
     try:
         os.makedirs(backup_dir, exist_ok=True)
-        
+
         for config_type, filename in CONFIG_FILES.items():
             if os.path.exists(filename):
                 backup_filename = f"{backup_dir}/{config_type}_backup_{timestamp}.json"
                 import shutil
                 shutil.copy2(filename, backup_filename)
-        
+
         # Also backup user levels
         if os.path.exists('user_levels.json'):
             shutil.copy2('user_levels.json', f"{backup_dir}/user_levels_backup_{timestamp}.json")
         if os.path.exists('level_config.json'):
             shutil.copy2('level_config.json', f"{backup_dir}/level_config_backup_{timestamp}.json")
-        
+
         logger.info(f"📦 Configuration backup created: {timestamp}")
         return True
     except Exception as e:
@@ -602,7 +602,7 @@ class GoofyMod(discord.Client):
         """Update status every 10 minutes"""
         if self.is_ready():
             await self.update_server_status()
-    
+
     @tasks.loop(hours=1)
     async def auto_backup_configs(self):
         """Automatically backup configurations every hour"""
@@ -630,14 +630,14 @@ class GoofyMod(discord.Client):
         """Handle sticky message maintenance and other message events"""
         if message.author.bot:
             return  # Skip bot messages to prevent loops
-        
+
         # Check if this channel has a sticky message
         guild_id = str(message.guild.id)
         channel_id = str(message.channel.id)
-        
+
         if guild_id in sticky_messages and channel_id in sticky_messages[guild_id]:
             sticky_info = sticky_messages[guild_id][channel_id]
-            
+
             try:
                 # Delete the old sticky message
                 try:
@@ -645,14 +645,14 @@ class GoofyMod(discord.Client):
                     await old_sticky.delete()
                 except (discord.NotFound, discord.Forbidden):
                     pass  # Message already deleted or no permissions
-                
+
                 # Repost the sticky message
                 new_sticky = await message.channel.send(sticky_info['content'])
-                
+
                 # Update the stored message ID
                 sticky_messages[guild_id][channel_id]['message_id'] = new_sticky.id
                 save_sticky_config()
-                
+
             except Exception as e:
                 logger.error(f"Error maintaining sticky message: {e}")
 
@@ -662,13 +662,13 @@ class GoofyMod(discord.Client):
             return  # Skip bots
 
         guild_id = str(member.guild.id)
-        
+
         # 🛡️ VERIFICATION SYSTEM - Handle automatic captcha DM first
         if guild_id in verification_config and verification_config[guild_id]['enabled']:
             try:
                 # Generate automatic captcha for new member (3-digit numbers only)
                 captcha_code = str(random.randint(100, 999))
-                
+
                 # Store pending verification
                 pending_verifications[member.id] = {
                     'guild_id': member.guild.id,
@@ -677,7 +677,7 @@ class GoofyMod(discord.Client):
                     'issued_by': None,  # Automatic system
                     'auto_generated': True
                 }
-                
+
                 # Create welcome + captcha embed for DM
                 captcha_embed = discord.Embed(
                     title="🎉 WELCOME TO THE SERVER! 🎉",
@@ -687,14 +687,14 @@ class GoofyMod(discord.Client):
                                f"Use the `/verify` command below to prove you're not a bot!",
                     color=0x3498DB
                 )
-                
+
                 captcha_embed.add_field(
                     name="🔢 Your Captcha Code",
                     value=f"`{captcha_code}`\n\n**USE THIS COMMAND:** `/verify {captcha_code}`\n"
                           f"Copy this EXACT command and use it in this DM! 🧠",
                     inline=False
                 )
-                
+
                 captcha_embed.add_field(
                     name="📝 Instructions",
                     value="• Use this command in this DM: `/verify (your code)`\n"
@@ -703,7 +703,7 @@ class GoofyMod(discord.Client):
                           "• Type the code manually, don't copy-paste!",
                     inline=False
                 )
-                
+
                 captcha_embed.add_field(
                     name="❓ Need Help?",
                     value=f"• **Can't find `/verify` command?** Make sure slash commands are enabled!\n"
@@ -711,9 +711,9 @@ class GoofyMod(discord.Client):
                           f"• **Simple process:** Just copy and use the command above! 📬",
                     inline=False
                 )
-                
+
                 captcha_embed.set_footer(text="Just use the /verify command with your code - it's that simple! 🛡️")
-                
+
                 # Try to send the captcha DM
                 try:
                     await member.send(embed=captcha_embed)
@@ -730,7 +730,7 @@ class GoofyMod(discord.Client):
                                 f"I couldn't send you a verification code! Please enable DMs and ask a mod for manual verification! 📬",
                                 delete_after=30
                             )
-                            
+
             except Exception as e:
                 logger.error(f"Error sending automatic verification captcha: {e}")
 
@@ -757,7 +757,7 @@ class GoofyMod(discord.Client):
                                         logger.warning(f"Can't assign role {role.name} to {member.name} - insufficient permissions")
                                     except Exception as e:
                                         logger.error(f"Error assigning autorole {role.name}: {e}")
-                            
+
                             if roles_assigned:
                                 logger.info(f"🎭 Assigned autoroles to {member.name}: {', '.join([r.replace('@&', '@') for r in roles_assigned])}")
 
@@ -816,7 +816,7 @@ class GoofyMod(discord.Client):
             return  # Skip bots
 
         guild_id = str(member.guild.id)
-        
+
         # 🚪 FAREWELL SYSTEM - Check if leaving messages are enabled  
         # First check if there's a welcome config (we'll reuse the welcome channel for farewells)
         welcome_config = load_welcome_config()
@@ -841,7 +841,7 @@ class GoofyMod(discord.Client):
                             f"💨 {member.mention} vanished faster than my dad! Poof! Gone! ✨",
                             f"🚂 {member.mention} took the L train to another server! All aboard! 🚃"
                         ]
-                        
+
                         farewell_message = random.choice(farewell_messages)
 
                         embed = discord.Embed(
@@ -855,7 +855,7 @@ class GoofyMod(discord.Client):
                             value=f"We're down to {member.guild.member_count} members! 📉", 
                             inline=True
                         )
-                        
+
                         # Calculate how long they were here
                         if member.joined_at:
                             time_here = discord.utils.utcnow() - member.joined_at
@@ -866,7 +866,7 @@ class GoofyMod(discord.Client):
                                 time_str = "1 day (didn't even unpack! 📦)"
                             else:
                                 time_str = f"{days} days (had a good run! ⚡)"
-                            
+
                             embed.add_field(
                                 name="⏰ Time With Us", 
                                 value=time_str, 
@@ -1258,13 +1258,18 @@ RANDOM_GOOFY_RESPONSES = [
     reason='The reason for the ban (default: Being too serious in a goofy server)'
 )
 async def ban_slash(interaction: discord.Interaction, member: discord.Member, reason: str = "Being too serious in a goofy server"):
+    # Check if we're in a guild
+    if not interaction.guild:
+        await interaction.response.send_message("❌ This command can only be used in a server!", ephemeral=True)
+        return
+    
     # Validate member for hosting compatibility
     member = await validate_member(member, interaction.guild)
     if not member:
         await interaction.response.send_message("❌ Can't find that user! They might have already yeeted themselves out! 🚪", ephemeral=True)
         return
-    
-    if not interaction.user.guild_permissions.ban_members:
+
+    if not hasattr(interaction.user, 'guild_permissions') or not interaction.user.guild_permissions.ban_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
 
@@ -1273,9 +1278,9 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, re
         try:
             dm_embed = discord.Embed(
                 title="🚨 YOU HAVE BEEN BANNED",
-                description=f"You have been banned from **{interaction.guild.name}**\n\n"
+                description=f"You have been banned from **{interaction.guild.name if interaction.guild else 'Unknown Server'}**\n\n"
                            f"**Reason:** {reason}\n"
-                           f"**Moderator:** {interaction.user.name}\n\n"
+                           f"**Moderator:** {interaction.user.name if interaction.user else 'Unknown'}\n\n"
                            f"If you believe this was a mistake, contact the server administrators.",
                 color=0xFF0000
             )
@@ -1283,8 +1288,8 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, re
             await member.send(embed=dm_embed)
         except (discord.Forbidden, discord.HTTPException):
             pass  # User has DMs disabled or blocked the bot
-        
-        await member.ban(reason=f"Banned by {interaction.user}: {reason}")
+
+        await member.ban(reason=f"Banned by {interaction.user.name if interaction.user else 'Unknown'}: {reason}")
         response = random.choice(GOOFY_RESPONSES['ban'])
         embed = discord.Embed(
             title="🔨 BONK! Ban Hammer Activated!",
@@ -1303,7 +1308,7 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, re
     reason='The reason for the kick (default: Needs a time-out)'
 )
 async def kick_slash(interaction: discord.Interaction, member: discord.Member, reason: str = "Needs a time-out"):
-    if not interaction.user.guild_permissions.kick_members:
+    if not hasattr(interaction.user, 'guild_permissions') or not interaction.user.guild_permissions.kick_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
 
@@ -1322,8 +1327,8 @@ async def kick_slash(interaction: discord.Interaction, member: discord.Member, r
             await member.send(embed=dm_embed)
         except (discord.Forbidden, discord.HTTPException):
             pass  # User has DMs disabled or blocked the bot
-        
-        await member.kick(reason=f"Kicked by {interaction.user}: {reason}")
+
+        await member.kick(reason=f"Kicked by {interaction.user.name if interaction.user else 'Unknown'}: {reason}")
         response = random.choice(GOOFY_RESPONSES['kick'])
         embed = discord.Embed(
             title="🦶 YEET! Kick Activated!",
@@ -1364,7 +1369,7 @@ def parse_duration(duration_str):
     reason='The reason for the mute (default: Being too loud)'
 )
 async def mute_slash(interaction: discord.Interaction, member: discord.Member, duration: str = "", reason: str = "Being too loud"):
-    if not interaction.user.guild_permissions.moderate_members:
+    if not hasattr(interaction.user, 'guild_permissions') or not interaction.user.guild_permissions.moderate_members:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
 
@@ -1389,7 +1394,7 @@ async def mute_slash(interaction: discord.Interaction, member: discord.Member, d
             else:
                 duration_display = f"{duration_minutes}m"
 
-        await member.edit(timed_out_until=mute_duration, reason=f"Muted by {interaction.user}: {reason}")
+        await member.edit(timed_out_until=mute_duration, reason=f"Muted by {interaction.user.name if interaction.user else 'Unknown'}: {reason}")
 
         response = random.choice(GOOFY_RESPONSES['mute'])
         embed = discord.Embed(
@@ -1696,28 +1701,28 @@ async def stick_context_menu(interaction: discord.Interaction, message: discord.
     if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
     channel_id = str(interaction.channel.id)
-    
+
     # Initialize guild and channel in sticky config
     if guild_id not in sticky_messages:
         sticky_messages[guild_id] = {}
-    
+
     # Check if this channel already has a sticky message
     if channel_id in sticky_messages[guild_id]:
         await interaction.response.send_message("⚠️ This channel already has a sticky message! Use `/unstick` to remove it first! 📌", ephemeral=True)
         return
-    
+
     try:
         # Create sticky message content
         sticky_content = f"**Stickied Message:**\n\n{message.content}"
         if message.attachments:
             sticky_content += f"\n\n📎 *[Original message had {len(message.attachments)} attachment(s)]*"
-        
+
         # Send the sticky message
         sticky_msg = await interaction.channel.send(sticky_content)
-        
+
         # Store sticky message info
         sticky_messages[guild_id][channel_id] = {
             'content': sticky_content,
@@ -1726,7 +1731,7 @@ async def stick_context_menu(interaction: discord.Interaction, message: discord.
             'original_author': message.author.id
         }
         save_sticky_config()
-        
+
         # Success response
         embed = discord.Embed(
             title="📌 Sticky Message Created!",
@@ -1736,7 +1741,7 @@ async def stick_context_menu(interaction: discord.Interaction, message: discord.
                        f"**Channel:** {interaction.channel.mention}",
             color=0x00FF00
         )
-        
+
         embed.add_field(
             name="💡 How it works",
             value="• The message will automatically repost when new messages appear\n"
@@ -1744,11 +1749,11 @@ async def stick_context_menu(interaction: discord.Interaction, message: discord.
                   "• Use `/unstick` to remove it when no longer needed",
             inline=False
         )
-        
+
         embed.set_footer(text="Sticky message system keeping important info visible! 📍")
-        
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
-        
+
     except discord.Forbidden:
         await interaction.response.send_message("❌ I don't have permission to send messages in this channel! 🚫", ephemeral=True)
     except Exception as e:
@@ -1760,15 +1765,15 @@ async def unstick_slash(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
     channel_id = str(interaction.channel.id)
-    
+
     # Check if there's a sticky message
     if guild_id not in sticky_messages or channel_id not in sticky_messages[guild_id]:
         await interaction.response.send_message("❌ There's no sticky message in this channel! 🤷‍♂️", ephemeral=True)
         return
-    
+
     try:
         # Try to delete the current sticky message
         sticky_info = sticky_messages[guild_id][channel_id]
@@ -1777,20 +1782,20 @@ async def unstick_slash(interaction: discord.Interaction):
             await sticky_msg.delete()
         except (discord.NotFound, discord.Forbidden):
             pass  # Message already deleted or no permissions
-        
+
         # Remove from config
         del sticky_messages[guild_id][channel_id]
         if not sticky_messages[guild_id]:  # Remove guild if no more sticky messages
             del sticky_messages[guild_id]
         save_sticky_config()
-        
+
         embed = discord.Embed(
             title="🗑️ Sticky Message Removed!",
             description="The sticky message has been removed from this channel! 📍",
             color=0xFF6B35
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
-        
+
     except Exception as e:
         await interaction.response.send_message(f"❌ Error removing sticky message: {str(e)} 🤪", ephemeral=True)
 
@@ -1804,26 +1809,26 @@ async def stick_slash(interaction: discord.Interaction, message: str, reason: st
     if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("🚫 You don't have the power! Ask an admin! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
     channel_id = str(interaction.channel.id)
-    
+
     # Initialize guild and channel in sticky config
     if guild_id not in sticky_messages:
         sticky_messages[guild_id] = {}
-    
+
     # Check if this channel already has a sticky message
     if channel_id in sticky_messages[guild_id]:
         await interaction.response.send_message("⚠️ This channel already has a sticky message! Use `/unstick` to remove it first! 📌", ephemeral=True)
         return
-    
+
     try:
         # Create sticky message content
         sticky_content = f"**Stickied Message:**\n\n{message}"
-        
+
         # Send the sticky message
         sticky_msg = await interaction.channel.send(sticky_content)
-        
+
         # Store sticky message info
         sticky_messages[guild_id][channel_id] = {
             'content': sticky_content,
@@ -1832,7 +1837,7 @@ async def stick_slash(interaction: discord.Interaction, message: str, reason: st
             'reason': reason
         }
         save_sticky_config()
-        
+
         # Success response
         embed = discord.Embed(
             title="📍 Sticky Message Created!",
@@ -1842,7 +1847,7 @@ async def stick_slash(interaction: discord.Interaction, message: str, reason: st
                        f"**Channel:** {interaction.channel.mention}",
             color=0x00FF00
         )
-        
+
         embed.add_field(
             name="💡 How it works",
             value="• The message will automatically repost when new messages appear\n"
@@ -1850,11 +1855,11 @@ async def stick_slash(interaction: discord.Interaction, message: str, reason: st
                   "• Use `/unstick` to remove it when no longer needed",
             inline=False
         )
-        
+
         embed.set_footer(text="Sticky message system keeping important info visible! 📍")
-        
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
-        
+
     except discord.Forbidden:
         await interaction.response.send_message("❌ I don't have permission to send messages in this channel! 🚫", ephemeral=True)
     except Exception as e:
@@ -2076,33 +2081,33 @@ async def servers_slash(interaction: discord.Interaction):
     if not (interaction.user.guild_permissions.administrator or interaction.user.id == interaction.client.owner_id):
         await interaction.response.send_message("🚫 Only administrators can view the server list!", ephemeral=True)
         return
-    
+
     await interaction.response.defer()  # This command might take time
-    
+
     servers_info = []
     total_members = 0
-    
+
     for guild in bot.guilds:
         invite_link = "❌ No invite available"
-        
+
         # Try to create an invite link
         try:
             # Find a suitable channel to create invite from
             invite_channel = None
-            
+
             # Try text channels first
             for channel in guild.text_channels:
                 if channel.permissions_for(guild.me).create_instant_invite:
                     invite_channel = channel
                     break
-            
+
             # If no text channel works, try voice channels
             if not invite_channel:
                 for channel in guild.voice_channels:
                     if channel.permissions_for(guild.me).create_instant_invite:
                         invite_channel = channel
                         break
-            
+
             # Create the invite if we found a suitable channel
             if invite_channel:
                 invite = await invite_channel.create_invite(
@@ -2111,12 +2116,12 @@ async def servers_slash(interaction: discord.Interaction):
                     unique=False  # Can reuse existing invites
                 )
                 invite_link = f"[Join Server]({invite.url})"
-        
+
         except discord.Forbidden:
             invite_link = "❌ No permissions"
         except Exception:
             invite_link = "❌ Failed to create"
-        
+
         servers_info.append({
             'name': guild.name,
             'members': guild.member_count,
@@ -2124,31 +2129,31 @@ async def servers_slash(interaction: discord.Interaction):
             'id': guild.id
         })
         total_members += guild.member_count
-    
+
     # Sort servers by member count (largest first)
     servers_info.sort(key=lambda x: x['members'], reverse=True)
-    
+
     # Create embed with server information
     embed = discord.Embed(
         title="🌐 Goofy Mod Bot Server Directory",
         description=f"Currently spreading goofiness across **{len(bot.guilds)}** servers with **{total_members:,}** total members!",
         color=0x00FF00
     )
-    
+
     # Add servers to embed (limit to 10 per page to avoid Discord limits)
     server_list = ""
     for i, server in enumerate(servers_info[:10]):  # Show first 10 servers
         server_list += f"**{i+1}.** {server['name']}\n"
         server_list += f"   👥 {server['members']:,} members\n"
         server_list += f"   🔗 {server['invite']}\n\n"
-    
+
     if server_list:
         embed.add_field(
             name="📋 Server List", 
             value=server_list[:1024],  # Discord field limit
             inline=False
         )
-    
+
     # Add pagination info if there are more servers
     if len(servers_info) > 10:
         embed.add_field(
@@ -2156,7 +2161,7 @@ async def servers_slash(interaction: discord.Interaction):
             value=f"Showing top 10 servers. Total: {len(servers_info)} servers", 
             inline=False
         )
-    
+
     # Add fun stats
     largest_server = max(servers_info, key=lambda x: x['members'])
     embed.add_field(
@@ -2164,9 +2169,9 @@ async def servers_slash(interaction: discord.Interaction):
         value=f"**Largest Server:** {largest_server['name']} ({largest_server['members']:,} members)\n**Average Members:** {total_members // len(servers_info):,}\n**Bot Reach:** Spreading chaos worldwide! 🌍",
         inline=False
     )
-    
+
     embed.set_footer(text="🤖 Invite links are valid indefinitely • Use with great power!")
-    
+
     await interaction.followup.send(embed=embed)
 
 # Fun interactive commands
@@ -2276,15 +2281,15 @@ async def random_slash(interaction: discord.Interaction):
 async def embed_slash(interaction: discord.Interaction, title: str, description: str = "", color: str = "#7289DA", 
                      thumbnail: str = "", image: str = "", footer: str = "", author: str = "",
                      field1: str = "", field2: str = "", field3: str = ""):
-    
+
     if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("🚫 You need manage messages permission to create embeds! Ask an admin bestie! 📝", ephemeral=True)
         return
-    
+
     try:
         # Parse color
         embed_color = 0x7289DA  # Default Discord blue
-        
+
         if color:
             # Handle preset colors
             preset_colors = {
@@ -2293,7 +2298,7 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
                 'white': 0xFFFFFF, 'yellow': 0xFFFF00, 'cyan': 0x00FFFF, 'magenta': 0xFF00FF,
                 'discord': 0x7289DA, 'blurple': 0x5865F2, 'gray': 0x808080, 'grey': 0x808080
             }
-            
+
             if color.lower() in preset_colors:
                 embed_color = preset_colors[color.lower()]
             elif color.startswith('#'):
@@ -2310,18 +2315,18 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
                 except ValueError:
                     await interaction.response.send_message("❌ Invalid color format! Use hex (#FF0000) or preset colors (red/blue/green/etc)! 🎨", ephemeral=True)
                     return
-        
+
         # Create embed
         embed = discord.Embed(
             title=title if title else None,
             description=description if description else None,
             color=embed_color
         )
-        
+
         # Add author if provided
         if author:
             embed.set_author(name=author, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
-        
+
         # Add thumbnail if provided
         if thumbnail:
             try:
@@ -2329,7 +2334,7 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
             except:
                 await interaction.response.send_message("❌ Invalid thumbnail URL! Make sure it's a valid image link! 🖼️", ephemeral=True)
                 return
-        
+
         # Add main image if provided
         if image:
             try:
@@ -2337,11 +2342,11 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
             except:
                 await interaction.response.send_message("❌ Invalid image URL! Make sure it's a valid image link! 🖼️", ephemeral=True)
                 return
-        
+
         # Add footer if provided
         if footer:
             embed.set_footer(text=footer, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
-        
+
         # Parse and add fields
         fields = [field1, field2, field3]
         for field_data in fields:
@@ -2353,17 +2358,17 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
                         field_title = parts[0].strip()
                         field_content = parts[1].strip()
                         field_inline = parts[2].strip().lower() == 'true' if len(parts) > 2 else False
-                        
+
                         if field_title and field_content:
                             embed.add_field(name=field_title, value=field_content, inline=field_inline)
                 except:
                     continue  # Skip invalid fields
-        
+
         # Check if embed has content
         if not title and not description and not embed.fields:
             await interaction.response.send_message("❌ Embed must have at least a title, description, or fields! Can't send an empty embed bestie! 📝", ephemeral=True)
             return
-        
+
         # Success response
         success_messages = [
             "✨ Embed created and sent! That's some premium content right there! 🔥",
@@ -2372,10 +2377,10 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
             "👑 Embed sent! That's giving main character energy! ✨",
             "💀 Embed absolutely SENDING! No cap, that's professional grade content! 🚀"
         ]
-        
+
         await interaction.response.send_message(random.choice(success_messages), ephemeral=True)
         await interaction.followup.send(embed=embed)
-        
+
     except discord.Forbidden:
         await interaction.response.send_message("❌ I don't have permission to send embeds! Check my permissions bestie! 🚫", ephemeral=True)
     except Exception as e:
@@ -2387,7 +2392,7 @@ async def embed_slash(interaction: discord.Interaction, title: str, description:
 async def yapping_slash(interaction: discord.Interaction, user: discord.Member = None):
     target = user or interaction.user
     yap_level = random.randint(1, 100)
-    
+
     yap_messages = [
         f"{target.mention} is absolutely SENDING with their yapping! 🗣️💨",
         f"Bro {target.mention} hasn't stopped yapping since 2019 💀",
@@ -2398,7 +2403,7 @@ async def yapping_slash(interaction: discord.Interaction, user: discord.Member =
         f"{target.mention} could yap their way out of the backrooms 🚪",
         f"AI got jealous of {target.mention}'s yapping algorithm 🤖"
     ]
-    
+
     if yap_level < 20:
         status = "🤐 Silent Mode (Sus behavior detected)"
     elif yap_level < 40:
@@ -2409,7 +2414,7 @@ async def yapping_slash(interaction: discord.Interaction, user: discord.Member =
         status = "🗣️ Professional Yapper"
     else:
         status = "💀 ABSOLUTE UNIT OF YAPPING"
-    
+
     embed = discord.Embed(
         title="🗣️ YAPPING SCANNER ACTIVATED",
         description=random.choice(yap_messages),
@@ -2421,7 +2426,7 @@ async def yapping_slash(interaction: discord.Interaction, user: discord.Member =
                    value="Touch grass" if yap_level > 80 else "Keep grinding that sigma yapping energy", 
                    inline=False)
     embed.set_footer(text="Yapping levels measured by certified brainrot scientists")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='zesty-check', description='Check someone\'s zesty levels fr fr 💅')
@@ -2429,7 +2434,7 @@ async def yapping_slash(interaction: discord.Interaction, user: discord.Member =
 async def zesty_check_slash(interaction: discord.Interaction, user: discord.Member = None):
     target = user or interaction.user
     zesty_level = random.randint(1, 100)
-    
+
     zesty_comments = [
         f"{target.mention} is serving absolute zesty energy and we're here for it! 💅✨",
         f"The zestiness is RADIATING from {target.mention} rn 🌈",
@@ -2440,7 +2445,7 @@ async def zesty_check_slash(interaction: discord.Interaction, user: discord.Memb
         f"{target.mention} is giving main character zesty vibes and honestly? Valid 📚",
         f"The zesty levels are off the charts! {target.mention} broke the scanner! 📊"
     ]
-    
+
     if zesty_level < 20:
         vibe = "🗿 Stone Cold Sigma Energy"
     elif zesty_level < 40:
@@ -2451,7 +2456,7 @@ async def zesty_check_slash(interaction: discord.Interaction, user: discord.Memb
         vibe = "🌈 FULL ZESTY MODE ACTIVATED"
     else:
         vibe = "✨ LEGENDARY ZESTY OVERLORD ✨"
-    
+
     embed = discord.Embed(
         title="💅 ZESTY SCANNER RESULTS",
         description=random.choice(zesty_comments),
@@ -2463,7 +2468,7 @@ async def zesty_check_slash(interaction: discord.Interaction, user: discord.Memb
                    value="Absolutely iconic behavior 💅" if zesty_level > 50 else "Needs more zesty energy 📈", 
                    inline=False)
     embed.set_footer(text="Zestiness certified by the International Brainrot Institute")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='lil-bro', description='Call someone lil bro with maximum disrespect 👶')
@@ -2481,7 +2486,7 @@ async def lil_bro_slash(interaction: discord.Interaction, user: discord.Member):
         f"POV: Lil bro {user.mention} thinks they're sigma but they're actually just... lil bro 💀",
         f"Not {user.mention} giving lil bro energy in the year of our lord 2025 😤"
     ]
-    
+
     embed = discord.Embed(
         title="👶 LIL BRO DETECTED",
         description=random.choice(lil_bro_roasts),
@@ -2490,7 +2495,7 @@ async def lil_bro_slash(interaction: discord.Interaction, user: discord.Member):
     embed.add_field(name="🎯 Lil Bro Level", value="MAXIMUM OVERDRIVE", inline=True)
     embed.add_field(name="💡 Advice", value="Try being less lil bro", inline=True)
     embed.set_footer(text="Lil bro behavior documented for posterity")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='no-cap', description='Verify if something is actually no cap or pure cap 🧢')
@@ -2498,7 +2503,7 @@ async def lil_bro_slash(interaction: discord.Interaction, user: discord.Member):
 async def no_cap_slash(interaction: discord.Interaction, statement: str):
     is_cap = random.choice([True, False])
     cap_level = random.randint(1, 100)
-    
+
     if is_cap:
         cap_responses = [
             f"That's CAP and we all know it! 🧢💀",
@@ -2525,7 +2530,7 @@ async def no_cap_slash(interaction: discord.Interaction, statement: str):
         ]
         verdict = "💯 CERTIFIED NO CAP"
         color = 0x00FF00
-    
+
     embed = discord.Embed(
         title="🧢 CAP DETECTION SCANNER",
         description=f"**Statement:** \"{statement}\"\n\n{random.choice(cap_responses if is_cap else no_cap_responses)}",
@@ -2534,14 +2539,14 @@ async def no_cap_slash(interaction: discord.Interaction, statement: str):
     embed.add_field(name="🎯 Verdict", value=verdict, inline=True)
     embed.add_field(name="📊 Cap Level", value=f"{cap_level if is_cap else 0}/100", inline=True)
     embed.set_footer(text="Cap detection powered by Gen Alpha AI technology")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='bussin-meter', description='Rate how bussin something is on the bussin scale 🤤')
 @app_commands.describe(thing='What needs a bussin rating?')
 async def bussin_meter_slash(interaction: discord.Interaction, thing: str):
     bussin_level = random.randint(1, 100)
-    
+
     bussin_comments = [
         f"YO {thing} is absolutely BUSSIN right now! 🤤💯",
         f"That {thing} is giving bussin energy and I'm here for it! 🔥",
@@ -2552,7 +2557,7 @@ async def bussin_meter_slash(interaction: discord.Interaction, thing: str):
         f"POV: {thing} woke up and chose to be absolutely bussin 💅",
         f"The bussin levels are astronomical! {thing} broke the scale! 📊"
     ]
-    
+
     if bussin_level < 20:
         rating = "🤢 Not Bussin (Actually Kinda Sus)"
     elif bussin_level < 40:
@@ -2563,7 +2568,7 @@ async def bussin_meter_slash(interaction: discord.Interaction, thing: str):
         rating = "🤤 ULTRA BUSSIN MODE"
     else:
         rating = "💀 TRANSCENDENT BUSSIN OVERLORD"
-    
+
     embed = discord.Embed(
         title="🤤 BUSSIN METER ACTIVATED",
         description=random.choice(bussin_comments),
@@ -2575,7 +2580,7 @@ async def bussin_meter_slash(interaction: discord.Interaction, thing: str):
                    value="Absolutely sending it! 🚀" if bussin_level > 70 else "Needs more bussin energy 📈", 
                    inline=False)
     embed.set_footer(text="Bussin levels certified by the International Bussin Academy")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='fanum-tax', description='Fanum tax someone\'s food/belongings like a true alpha 🍟')
@@ -2591,9 +2596,9 @@ async def fanum_tax_slash(interaction: discord.Interaction, user: discord.Member
         f"FANUM TAX ACTIVATED! {user.mention}'s {item} belongs to the streets now! 🛣️",
         f"{user.mention} really thought they could escape the fanum tax on their {item}! WRONG! ❌"
     ]
-    
+
     tax_rate = random.randint(50, 100)
-    
+
     embed = discord.Embed(
         title="🍟 FANUM TAX ACTIVATED",
         description=random.choice(fanum_messages),
@@ -2603,7 +2608,7 @@ async def fanum_tax_slash(interaction: discord.Interaction, user: discord.Member
     embed.add_field(name="🏛️ Authority", value="Certified Fanum Tax Collector", inline=True)
     embed.add_field(name="💡 Pro Tip", value="Hide your snacks better next time!", inline=False)
     embed.set_footer(text="Fanum tax is non-negotiable and legally binding in Ohio")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='gyat-rating', description='Rate someone\'s gyat energy (respectfully) 🍑')
@@ -2611,7 +2616,7 @@ async def fanum_tax_slash(interaction: discord.Interaction, user: discord.Member
 async def gyat_rating_slash(interaction: discord.Interaction, user: discord.Member = None):
     target = user or interaction.user
     gyat_level = random.randint(1, 100)
-    
+
     gyat_comments = [
         f"{target.mention} is serving absolute GYAT energy and we're all here for it! 🔥",
         f"The GYAT levels are ASTRONOMICAL from {target.mention} rn! 📊💀",
@@ -2622,7 +2627,7 @@ async def gyat_rating_slash(interaction: discord.Interaction, user: discord.Memb
         f"The GYAT committee has approved {target.mention} for legendary status! 🏆",
         f"{target.mention} really said 'let me have GYAT energy today' and delivered! 💯"
     ]
-    
+
     if gyat_level < 20:
         rating = "😐 GYAT? More like... nah"
     elif gyat_level < 40:
@@ -2633,7 +2638,7 @@ async def gyat_rating_slash(interaction: discord.Interaction, user: discord.Memb
         rating = "💀 GYAT OVERLOAD!"
     else:
         rating = "🚨 LEGENDARY GYAT STATUS"
-    
+
     embed = discord.Embed(
         title="🍑 GYAT RATING SCANNER",
         description=random.choice(gyat_comments),
@@ -2645,7 +2650,7 @@ async def gyat_rating_slash(interaction: discord.Interaction, user: discord.Memb
                    value="Absolutely iconic! 👑" if gyat_level > 70 else "Keep that energy! 💪", 
                    inline=False)
     embed.set_footer(text="GYAT ratings certified by the International Brainrot Institute (respectfully)")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='aura-points', description='Check someone\'s aura points - are they losing aura? ✨')
@@ -2654,7 +2659,7 @@ async def aura_points_slash(interaction: discord.Interaction, user: discord.Memb
     target = user or interaction.user
     aura_points = random.randint(-1000, 1000)
     change = random.randint(-100, 100)
-    
+
     if aura_points > 500:
         status = "✨ MAXIMUM AURA ACHIEVED"
         color = 0xFFD700
@@ -2671,7 +2676,7 @@ async def aura_points_slash(interaction: discord.Interaction, user: discord.Memb
         status = "💀 AURA IN THE NEGATIVES"
         color = 0xFF0000
         reaction = f"{target.mention} has achieved NEGATIVE aura! This is Ohio-level energy! 🌽"
-    
+
     # Determine what caused the change
     aura_events = [
         "Said something unhinged in chat",
@@ -2685,7 +2690,7 @@ async def aura_points_slash(interaction: discord.Interaction, user: discord.Memb
         "Made everyone laugh",
         "Exhibited lil bro behavior"
     ]
-    
+
     embed = discord.Embed(
         title="✨ AURA POINT SCANNER",
         description=reaction,
@@ -2699,14 +2704,14 @@ async def aura_points_slash(interaction: discord.Interaction, user: discord.Memb
                    value="Keep being iconic! 👑" if aura_points > 0 else "Time for a comeback arc! 📈", 
                    inline=True)
     embed.set_footer(text="Aura points tracked by the Sigma Energy Monitoring System")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='main-character-moment', description='Declare someone\'s main character moment 👑')
 @app_commands.describe(user='Who\'s having their main character moment?')
 async def main_character_moment_slash(interaction: discord.Interaction, user: discord.Member = None):
     target = user or interaction.user
-    
+
     mc_moments = [
         f"✨ MAIN CHARACTER ALERT ✨\n{target.mention} is absolutely SERVING main character energy right now! The spotlight is THEIRS! 🎭",
         f"🎬 BREAKING: {target.mention} just entered their main character era and we're all just NPCs in their story! 💀",
@@ -2717,7 +2722,7 @@ async def main_character_moment_slash(interaction: discord.Interaction, user: di
         f"🎪 Step aside everyone, {target.mention} is having their MOMENT! The main character energy is off the CHARTS! 📈",
         f"👑 CROWNED: {target.mention} as today's Main Character! The throne is theirs and we're all just living in their world! 🌍"
     ]
-    
+
     mc_perks = [
         "✨ Everything goes their way today",
         "🎯 All conversations revolve around them",
@@ -2728,7 +2733,7 @@ async def main_character_moment_slash(interaction: discord.Interaction, user: di
         "🔥 Rizz levels boosted to legendary",
         "📈 Main character privileges unlocked"
     ]
-    
+
     embed = discord.Embed(
         title="👑 MAIN CHARACTER MOMENT ACTIVATED",
         description=random.choice(mc_moments),
@@ -2738,7 +2743,7 @@ async def main_character_moment_slash(interaction: discord.Interaction, user: di
     embed.add_field(name="⏰ Duration", value="24 hours (or until someone else takes the spotlight)", inline=True)
     embed.add_field(name="🎯 Status", value="LEGENDARY PROTAGONIST ENERGY", inline=True)
     embed.set_footer(text="Main character status officially certified by the Plot Committee")
-    
+
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name='help', description='Show all available goofy commands 🤪')
@@ -4343,19 +4348,19 @@ async def autorole_slash(interaction: discord.Interaction, action: str, role: di
     if not interaction.user.guild_permissions.manage_roles:
         await interaction.response.send_message("🚫 Lil bro needs manage roles permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'setup':
         if not role:
             await interaction.response.send_message("❌ You need to specify a role to setup autorole! Try again bestie! 🎭", ephemeral=True)
             return
-            
+
         autorole_config[guild_id] = {
             'roles': [role.id],
             'channel': channel.id if channel else None
         }
-        
+
         embed = discord.Embed(
             title="🎭 AUTOROLE ACTIVATED!",
             description=f"YOOO! Autorole system is now BUSSIN! 🔥\n\nNew members will automatically get {role.mention} when they join!\n\n"
@@ -4367,87 +4372,87 @@ async def autorole_slash(interaction: discord.Interaction, action: str, role: di
                        value="• Use `/autorole add` to add more roles\n• Use `/autorole list` to see all autoroles\n• Make sure I have permission to assign these roles!", 
                        inline=False)
         embed.set_footer(text="Autorole system powered by sigma grindset technology")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
     elif action.lower() == 'add':
         if not role:
             await interaction.response.send_message("❌ Which role should I add to autorole? Specify a role bestie! 🎭", ephemeral=True)
             return
-            
+
         if guild_id not in autorole_config:
             autorole_config[guild_id] = {'roles': [], 'channel': None}
-            
+
         if role.id in autorole_config[guild_id]['roles']:
             await interaction.response.send_message(f"💀 {role.mention} is already in the autorole list! No cap! 🧢", ephemeral=True)
             return
-            
+
         autorole_config[guild_id]['roles'].append(role.id)
-        
+
         responses = [
             f"✨ {role.mention} has been added to the autorole gang! New members bout to get blessed! 🙏",
             f"🔥 AUTOROLE ENHANCED! {role.mention} will now be automatically assigned! No cap! 💯",
             f"👑 {role.mention} just got VIP status in the autorole system! Sigma energy activated! ⚡"
         ]
-        
+
         await interaction.response.send_message(random.choice(responses))
-        
+
     elif action.lower() == 'remove':
         if not role:
             await interaction.response.send_message("❌ Which role should I remove from autorole? Specify a role bestie! 🎭", ephemeral=True)
             return
-            
+
         if guild_id not in autorole_config or role.id not in autorole_config[guild_id]['roles']:
             await interaction.response.send_message(f"💀 {role.mention} isn't in the autorole list! Can't remove what ain't there! 🤷‍♂️", ephemeral=True)
             return
-            
+
         autorole_config[guild_id]['roles'].remove(role.id)
-        
+
         responses = [
             f"💨 {role.mention} has been YEETED from autorole! They lost their automatic status! 💀",
             f"🗑️ {role.mention} got removed from autorole! That's some negative aura behavior! 📉",
             f"⚡ {role.mention} has been unsubscribed from the autorole service! Touch grass! 🌱"
         ]
-        
+
         await interaction.response.send_message(random.choice(responses))
-        
+
     elif action.lower() == 'list':
         if guild_id not in autorole_config or not autorole_config[guild_id]['roles']:
             await interaction.response.send_message("📋 No autoroles configured! Your server is giving NPC energy! Use `/autorole setup` to fix this! 🤖", ephemeral=True)
             return
-            
+
         roles_list = []
         for role_id in autorole_config[guild_id]['roles']:
             role_obj = interaction.guild.get_role(role_id)
             if role_obj:
                 roles_list.append(role_obj.mention)
-                
+
         if not roles_list:
             await interaction.response.send_message("💀 All autoroles are invalid/deleted! Time for a cleanup bestie! 🧹", ephemeral=True)
             return
-            
+
         embed = discord.Embed(
             title="🎭 AUTOROLE CONFIGURATION",
             description=f"Here's your server's autorole setup! Absolutely SENDING! 🚀\n\n**Autoroles ({len(roles_list)}):**\n" + "\n".join(f"• {role}" for role in roles_list),
             color=0x7289DA
         )
-        
+
         channel_id = autorole_config[guild_id].get('channel')
         channel = interaction.guild.get_channel(channel_id) if channel_id else None
         embed.add_field(name="💬 Welcome Channel", 
                        value=channel.mention if channel else "Disabled", 
                        inline=True)
         embed.set_footer(text="Autorole status: BUSSIN | Sigma energy: MAXIMUM")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
     elif action.lower() == 'disable':
         if guild_id in autorole_config:
             del autorole_config[guild_id]
             await interaction.response.send_message("🚫 Autorole system has been DISABLED! New members will be roleless (sad) 😢", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Autorole wasn't even enabled bestie! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
-            
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use: setup/add/remove/list/disable\n\nExample: `/autorole setup @Member` 🎭", ephemeral=True)
 
@@ -4461,18 +4466,18 @@ async def raidprotection_slash(interaction: discord.Interaction, action: str, th
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("🚫 Only sigma administrators can configure raid protection! 👑", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'enable':
         if not 1 <= threshold <= 50:
             await interaction.response.send_message("❌ Threshold must be between 1-50! Pick a reasonable number bestie! 📊", ephemeral=True)
             return
-            
+
         if response.lower() not in ['lockdown', 'kick', 'ban']:
             await interaction.response.send_message("❌ Response must be: lockdown/kick/ban\nLockdown is recommended for most servers! 🛡️", ephemeral=True)
             return
-            
+
         raid_protection_config[guild_id] = {
             'enabled': True,
             'threshold': threshold,
@@ -4480,7 +4485,7 @@ async def raidprotection_slash(interaction: discord.Interaction, action: str, th
             'recent_joins': [],
             'locked_down': False
         }
-        
+
         embed = discord.Embed(
             title="🛡️ RAID PROTECTION ACTIVATED!",
             description=f"YO! Your server is now PROTECTED! 🔥\n\nRaid protection is absolutely SENDING with these settings:\n\n"
@@ -4494,16 +4499,16 @@ async def raidprotection_slash(interaction: discord.Interaction, action: str, th
                        value=f"• {threshold}+ joins detected in 30s = RAID ALERT!\n• Automatic {response} activated\n• All moderators get pinged\n• Server goes into defense mode!", 
                        inline=False)
         embed.set_footer(text="Raid protection powered by Ohio-level security technology")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
     elif action.lower() == 'disable':
         if guild_id in raid_protection_config:
             del raid_protection_config[guild_id]
             await interaction.response.send_message("🚫 Raid protection DISABLED! Your server is now vulnerable! Hope you know what you're doing bestie! 😬", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Raid protection wasn't even enabled! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
-            
+
     elif action.lower() == 'status':
         if guild_id not in raid_protection_config:
             embed = discord.Embed(
@@ -4515,7 +4520,7 @@ async def raidprotection_slash(interaction: discord.Interaction, action: str, th
             config = raid_protection_config[guild_id]
             status_color = 0x00FF00 if config['enabled'] else 0xFF0000
             status_text = "ACTIVE 🟢" if config['enabled'] else "INACTIVE 🔴"
-            
+
             embed = discord.Embed(
                 title=f"🛡️ RAID PROTECTION: {status_text}",
                 description=f"Your server's defense status is absolutely BUSSIN! 💯\n\n"
@@ -4525,31 +4530,31 @@ async def raidprotection_slash(interaction: discord.Interaction, action: str, th
                            f"**Lockdown Status:** {'🔒 LOCKED' if config.get('locked_down', False) else '🔓 OPEN'}",
                 color=status_color
             )
-            
+
         embed.set_footer(text="Stay vigilant! Raiders hate this one trick!")
         await interaction.response.send_message(embed=embed)
-        
+
     elif action.lower() == 'config':
         # Same as enable but for updating existing config
         if guild_id not in raid_protection_config:
             await interaction.response.send_message("❌ Raid protection not enabled! Use `/raidprotection enable` first! 🛡️", ephemeral=True)
             return
-            
+
         if not 1 <= threshold <= 50:
             await interaction.response.send_message("❌ Threshold must be between 1-50! Pick a reasonable number bestie! 📊", ephemeral=True)
             return
-            
+
         if response.lower() not in ['lockdown', 'kick', 'ban']:
             await interaction.response.send_message("❌ Response must be: lockdown/kick/ban\nLockdown is recommended for most servers! 🛡️", ephemeral=True)
             return
-            
+
         raid_protection_config[guild_id].update({
             'threshold': threshold,
             'action': response.lower()
         })
-        
+
         await interaction.response.send_message(f"⚡ Raid protection config UPDATED! New settings: {threshold} joins → {response.upper()}! Absolutely SENDING! 🚀")
-        
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use: enable/disable/config/status\n\nExample: `/raidprotection enable 15 lockdown` 🛡️", ephemeral=True)
 
@@ -4563,21 +4568,21 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
     if not interaction.user.guild_permissions.manage_roles:
         await interaction.response.send_message("🚫 You need manage roles permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'setup':
         if not role:
             await interaction.response.send_message("❌ You need to specify a verified role! Example: `/verification setup @Verified` ✅", ephemeral=True)
             return
-            
+
         verification_config[guild_id] = {
             'enabled': True,
             'role': role.id,
             'channel': channel.id if channel else None
         }
         auto_save_config('verification')  # Save immediately
-        
+
         embed = discord.Embed(
             title="✅ VERIFICATION SYSTEM ACTIVATED!",
             description=f"YOOO! Verification is now BUSSIN! 🔥\n\n"
@@ -4591,9 +4596,9 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
                        value="• New members join without the verified role\n• They can only access verification channel\n• React to verification message to get verified\n• Pass the vibe check = get the role!", 
                        inline=False)
         embed.set_footer(text="Verification powered by sigma grindset security")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
     elif action.lower() == 'disable':
         if guild_id in verification_config:
             del verification_config[guild_id]
@@ -4601,7 +4606,7 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
             await interaction.response.send_message("🚫 Verification system DISABLED! Your server is now giving open-door energy! 🚪", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Verification wasn't even enabled! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
-            
+
     elif action.lower() == 'status':
         if guild_id not in verification_config:
             embed = discord.Embed(
@@ -4613,7 +4618,7 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
             config = verification_config[guild_id]
             role_obj = interaction.guild.get_role(config['role'])
             channel_obj = interaction.guild.get_channel(config['channel']) if config.get('channel') else None
-            
+
             embed = discord.Embed(
                 title="✅ VERIFICATION: ACTIVE",
                 description=f"Your verification system is absolutely SENDING! 💯\n\n"
@@ -4622,10 +4627,10 @@ async def verification_slash(interaction: discord.Interaction, action: str, role
                            f"**Status:** PROTECTING THE VIBES! 🛡️",
                 color=0x00FF00
             )
-            
+
         embed.set_footer(text="Keep the sus accounts out! No cap!")
         await interaction.response.send_message(embed=embed)
-        
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use: setup/disable/status\n\nExample: `/verification setup @Verified #verify` ✅", ephemeral=True)
 
@@ -4640,18 +4645,18 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
     if not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message("🚫 You need manage channels permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'setup':
         if not category:
             await interaction.response.send_message("❌ You need to specify a category for tickets! Example: `/ticket-system setup \"Support Tickets\" @Staff #tickets` 🎫", ephemeral=True)
             return
-        
+
         if not panel_channel:
             await interaction.response.send_message("❌ You need to specify a channel for the ticket panel! Example: `/ticket-system setup \"Support Tickets\" @Staff #tickets` 📺", ephemeral=True)
             return
-            
+
         ticket_config[guild_id] = {
             'enabled': True,
             'category': category.id,
@@ -4659,7 +4664,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             'panel_channel': panel_channel.id
         }
         auto_save_config('ticket')  # Save immediately
-        
+
         # Send setup confirmation to admin
         setup_embed = discord.Embed(
             title="🎫 TICKET SYSTEM ACTIVATED!",
@@ -4678,9 +4683,9 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             inline=False
         )
         setup_embed.set_footer(text="Ticket system powered by sigma grindset customer service")
-        
+
         await interaction.response.send_message(embed=setup_embed)
-        
+
         # Get custom panel configuration or use defaults
         if guild_id in ticket_panel_config:
             config = ticket_panel_config[guild_id]
@@ -4691,7 +4696,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             panel_title = '🎫 SUPPORT TICKET SYSTEM'
             panel_description = None
             panel_color = 0x3498DB
-        
+
         # Create and send the interactive ticket panel in the chosen channel
         if panel_description:
             # Use custom description
@@ -4711,7 +4716,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
                                  "❓ **Server Questions** - Rules, features, and server info\n"
                                  "🚨 **Report User/Content** - Report inappropriate behavior\n"
                                  "💫 **Other Issues** - Anything else you need help with!")
-            
+
             panel_embed = discord.Embed(
                 title=panel_title,
                 description="**Need help? Create a support ticket!** 🚀\n\n"
@@ -4720,7 +4725,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
                            "**Your ticket will be private** - only you and staff can see it! 🔒",
                 color=panel_color
             )
-        
+
         panel_embed.add_field(
             name="📝 How it works",
             value="1️⃣ Click the **Create Ticket** button below\n"
@@ -4730,7 +4735,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
                   "5️⃣ Close your ticket when resolved!",
             inline=False
         )
-        
+
         panel_embed.add_field(
             name="⚡ Pro Tips",
             value="• Be specific about your issue for faster help!\n"
@@ -4739,17 +4744,17 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
                   "• Be patient - staff will respond ASAP!",
             inline=False
         )
-        
+
         panel_embed.set_footer(text="Customer support that's absolutely BUSSIN! 🔥")
-        
+
         # Create the persistent view with buttons
         panel_view = TicketPanelView(guild_id)
-        
+
         try:
             await panel_channel.send(embed=panel_embed, view=panel_view)
         except Exception as e:
             logger.error(f"Failed to send ticket panel: {e}")
-        
+
     elif action.lower() == 'disable':
         if guild_id in ticket_config:
             del ticket_config[guild_id]
@@ -4757,7 +4762,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             await interaction.response.send_message("🚫 Ticket system DISABLED! Customer service is now giving offline energy! 📴", ephemeral=True)
         else:
             await interaction.response.send_message("💀 Ticket system wasn't even enabled! Can't disable what ain't there! 🤷‍♂️", ephemeral=True)
-            
+
     elif action.lower() == 'status':
         if guild_id not in ticket_config:
             embed = discord.Embed(
@@ -4769,7 +4774,7 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
             config = ticket_config[guild_id]
             category_obj = interaction.guild.get_channel(config['category'])
             staff_role_obj = interaction.guild.get_role(config['staff_role']) if config.get('staff_role') else None
-            
+
             embed = discord.Embed(
                 title="🎫 TICKETS: ACTIVE",
                 description=f"Your ticket system is absolutely SENDING! 💯\n\n"
@@ -4778,10 +4783,10 @@ async def ticket_system_slash(interaction: discord.Interaction, action: str, cat
                            f"**Status:** CUSTOMER SERVICE BUSSIN! 🎭",
                 color=0x00FF00
             )
-            
+
         embed.set_footer(text="Support tickets = premium user experience!")
         await interaction.response.send_message(embed=embed)
-        
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use: setup/disable/status\n\nExample: `/ticket-system setup \"Support\" @Staff #tickets` 🎫", ephemeral=True)
 
@@ -4803,34 +4808,34 @@ async def ticket_panel_slash(interaction: discord.Interaction, action: str, valu
     if not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message("🚫 You need manage channels permission to customize ticket panels! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     # Initialize config if it doesn't exist
     if guild_id not in ticket_panel_config:
         ticket_panel_config[guild_id] = {}
-    
+
     if action == 'title':
         if not value:
             await interaction.response.send_message("❌ Please provide a title! Example: `/ticket-panel title \"🆘 Get Help Here!\"`", ephemeral=True)
             return
-        
+
         ticket_panel_config[guild_id]['title'] = value
         await interaction.response.send_message(f"✅ Panel title updated to: **{value}**\n\nUse `/ticket-panel preview` to see how it looks! 🎨", ephemeral=True)
-    
+
     elif action == 'description':
         if not value:
             await interaction.response.send_message("❌ Please provide a description! Example: `/ticket-panel description \"Need assistance? We're here to help!\"`", ephemeral=True)
             return
-        
+
         ticket_panel_config[guild_id]['description'] = value
         await interaction.response.send_message(f"✅ Panel description updated!\n\nNew description: {value[:100]}{'...' if len(value) > 100 else ''}\n\nUse `/ticket-panel preview` to see the full result! 🎨", ephemeral=True)
-    
+
     elif action == 'color':
         if not value:
             await interaction.response.send_message("❌ Please provide a hex color! Example: `/ticket-panel color #ff6b6b` or `/ticket-panel color red`", ephemeral=True)
             return
-        
+
         # Parse color value
         color_int = None
         if value.lower() in ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink']:
@@ -4853,9 +4858,9 @@ async def ticket_panel_slash(interaction: discord.Interaction, action: str, valu
             except ValueError:
                 await interaction.response.send_message("❌ Invalid color format! Use hex like `#ff6b6b` or color names like `red`, `blue`, `green`, etc.", ephemeral=True)
                 return
-        
+
         ticket_panel_config[guild_id]['color'] = color_int
-        
+
         # Create color preview embed
         preview_embed = discord.Embed(
             title="🎨 Color Updated!",
@@ -4863,26 +4868,26 @@ async def ticket_panel_slash(interaction: discord.Interaction, action: str, valu
             color=color_int
         )
         await interaction.response.send_message(embed=preview_embed, ephemeral=True)
-    
+
     elif action == 'button':
         if not value:
             await interaction.response.send_message("❌ Please provide button text and emoji! Format: `text,emoji`\nExample: `/ticket-panel button \"Get Support,🆘\"`", ephemeral=True)
             return
-        
+
         # Parse button text and emoji
         parts = value.split(',')
         if len(parts) != 2:
             await interaction.response.send_message("❌ Format should be: `text,emoji`\nExample: `/ticket-panel button \"Get Support,🆘\"`", ephemeral=True)
             return
-        
+
         button_text = parts[0].strip().strip('"')
         button_emoji = parts[1].strip()
-        
+
         ticket_panel_config[guild_id]['button_text'] = button_text
         ticket_panel_config[guild_id]['button_emoji'] = button_emoji
-        
+
         await interaction.response.send_message(f"✅ Button updated!\n\n**Text:** {button_text}\n**Emoji:** {button_emoji}\n\nUse `/ticket-panel preview` to see how it looks! 🎨", ephemeral=True)
-    
+
     elif action == 'categories':
         embed = discord.Embed(
             title="🗂️ Ticket Categories Management",
@@ -4896,29 +4901,29 @@ async def ticket_panel_slash(interaction: discord.Interaction, action: str, valu
             color=0x3498DB
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
-    
+
     elif action == 'reset':
         if guild_id in ticket_panel_config:
             del ticket_panel_config[guild_id]
-        
+
         await interaction.response.send_message("🔄 Ticket panel reset to default settings!\n\nAll customizations have been cleared. Your panel will now use the default goofy design! 🎭", ephemeral=True)
-    
+
     elif action == 'preview':
         # Create preview of current panel settings
         config = ticket_panel_config.get(guild_id, {})
-        
+
         title = config.get('title', '🎫 SUPPORT TICKET SYSTEM')
         description = config.get('description', "**Need help? Create a support ticket!** 🚀\n\nClick the button below to start!")
         color = config.get('color', 0x3498DB)
         button_text = config.get('button_text', 'Create Ticket')
         button_emoji = config.get('button_emoji', '🎫')
-        
+
         preview_embed = discord.Embed(
             title=f"🎨 PANEL PREVIEW: {title}",
             description=f"{description}\n\n**Button:** {button_emoji} {button_text}",
             color=color
         )
-        
+
         preview_embed.add_field(
             name="⚙️ Current Settings",
             value=f"**Title:** {title}\n"
@@ -4927,7 +4932,7 @@ async def ticket_panel_slash(interaction: discord.Interaction, action: str, valu
                   f"**Description:** {'Custom' if 'description' in config else 'Default'}",
             inline=False
         )
-        
+
         await interaction.response.send_message(embed=preview_embed, ephemeral=True)
 
 @tree.command(name='ticket-categories', description='🗂️ Manage custom ticket categories for your panel')
@@ -4948,12 +4953,12 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
     if not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message("🚫 You need manage channels permission to manage ticket categories! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action == 'list':
         config = ticket_panel_config.get(guild_id, {})
-        
+
         if 'categories' in config:
             categories = config['categories']
             embed = discord.Embed(
@@ -4961,7 +4966,7 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                 description="Here are your custom ticket categories:",
                 color=0x3498DB
             )
-            
+
             for i, cat in enumerate(categories, 1):
                 embed.add_field(
                     name=f"{i}. {cat['emoji']} {cat['label']}",
@@ -4974,7 +4979,7 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                 description="You're using the default categories. Here they are:",
                 color=0x95A5A6
             )
-            
+
             default_cats = [
                 {"emoji": "💡", "label": "General Support", "description": "Questions and general help", "value": "general"},
                 {"emoji": "🐞", "label": "Bug Report", "description": "Found something broken", "value": "bug"},
@@ -4983,14 +4988,14 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                 {"emoji": "🚨", "label": "Report User/Content", "description": "Report inappropriate behavior", "value": "report"},
                 {"emoji": "💫", "label": "Other", "description": "Anything else", "value": "other"}
             ]
-            
+
             for i, cat in enumerate(default_cats, 1):
                 embed.add_field(
                     name=f"{i}. {cat['emoji']} {cat['label']}",
                     value=f"**Description:** {cat['description']}\n**Value:** `{cat['value']}`",
                     inline=False
                 )
-        
+
         embed.add_field(
             name="📝 How to customize",
             value="• `/ticket-categories add` - Add new category\n"
@@ -4998,9 +5003,9 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                   "• `/ticket-categories reset` - Back to defaults",
             inline=False
         )
-        
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
-    
+
     elif action == 'add':
         if not all([label, description, emoji, value]):
             await interaction.response.send_message(
@@ -5014,7 +5019,7 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                 ephemeral=True
             )
             return
-        
+
         # Initialize config if needed
         if guild_id not in ticket_panel_config:
             ticket_panel_config[guild_id] = {}
@@ -5028,18 +5033,18 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
                 {"emoji": "🚨", "label": "Report User/Content", "description": "Report inappropriate behavior", "value": "report"},
                 {"emoji": "💫", "label": "Other", "description": "Anything else", "value": "other"}
             ]
-        
+
         # Check if value already exists
         existing_values = [cat['value'] for cat in ticket_panel_config[guild_id]['categories']]
         if value in existing_values:
             await interaction.response.send_message(f"❌ A category with value `{value}` already exists! Please use a different value.", ephemeral=True)
             return
-        
+
         # Check category limit (Discord dropdown max is 25)
         if len(ticket_panel_config[guild_id]['categories']) >= 25:
             await interaction.response.send_message("❌ Maximum of 25 categories allowed! Remove some categories first.", ephemeral=True)
             return
-        
+
         # Add new category
         new_category = {
             "label": label,
@@ -5047,9 +5052,9 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
             "emoji": emoji,
             "value": value
         }
-        
+
         ticket_panel_config[guild_id]['categories'].append(new_category)
-        
+
         await interaction.response.send_message(
             f"✅ Category added successfully!\n\n"
             f"**{emoji} {label}**\n"
@@ -5059,32 +5064,32 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
             f"Redeploy your ticket panel with `/ticket-system setup` to see changes!",
             ephemeral=True
         )
-    
+
     elif action == 'remove':
         if not value:
             await interaction.response.send_message("❌ Please specify the category value to remove!\nExample: `/ticket-categories remove general`", ephemeral=True)
             return
-        
+
         config = ticket_panel_config.get(guild_id, {})
         if 'categories' not in config:
             await interaction.response.send_message("❌ No custom categories found! You're using defaults.", ephemeral=True)
             return
-        
+
         # Find and remove the category
         categories = config['categories']
         category_to_remove = None
-        
+
         for cat in categories:
             if cat['value'] == value:
                 category_to_remove = cat
                 break
-        
+
         if not category_to_remove:
             await interaction.response.send_message(f"❌ No category found with value `{value}`!\n\nUse `/ticket-categories list` to see available categories.", ephemeral=True)
             return
-        
+
         categories.remove(category_to_remove)
-        
+
         await interaction.response.send_message(
             f"✅ Category removed!\n\n"
             f"**Removed:** {category_to_remove['emoji']} {category_to_remove['label']}\n"
@@ -5092,11 +5097,11 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
             f"Redeploy your ticket panel with `/ticket-system setup` to see changes!",
             ephemeral=True
         )
-    
+
     elif action == 'reset':
         if guild_id in ticket_panel_config and 'categories' in ticket_panel_config[guild_id]:
             del ticket_panel_config[guild_id]['categories']
-        
+
         await interaction.response.send_message(
             "🔄 Categories reset to defaults!\n\n"
             "Your ticket panel will now use the original 6 goofy categories:\n"
@@ -5114,41 +5119,41 @@ async def ticket_categories_slash(interaction: discord.Interaction, action: str,
 )
 async def ticket_slash(interaction: discord.Interaction, action: str, reason: str = "Need help", user: discord.Member = None):
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'create':
         if guild_id not in ticket_config:
             await interaction.response.send_message("❌ Ticket system not enabled! Ask an admin to set it up with `/ticket-system setup`! 🎫", ephemeral=True)
             return
-            
+
         config = ticket_config[guild_id]
         category = interaction.guild.get_channel(config['category'])
-        
+
         if not category:
             await interaction.response.send_message("❌ Ticket category was deleted! Ask an admin to reconfigure the system! 🗑️", ephemeral=True)
             return
-            
+
         # Create ticket channel
         ticket_name = f"ticket-{interaction.user.name}-{int(time.time())}"
-        
+
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
-        
+
         # Add staff role if configured
         if config.get('staff_role'):
             staff_role = interaction.guild.get_role(config['staff_role'])
             if staff_role:
                 overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        
+
         try:
             ticket_channel = await category.create_text_channel(
                 name=ticket_name,
                 overwrites=overwrites,
                 reason=f"Support ticket created by {interaction.user}"
             )
-            
+
             embed = discord.Embed(
                 title="🎫 TICKET CREATED!",
                 description=f"YO! Your support ticket is absolutely BUSSIN! 🔥\n\n"
@@ -5159,9 +5164,9 @@ async def ticket_slash(interaction: discord.Interaction, action: str, reason: st
                 color=0x00FF00
             )
             embed.set_footer(text="Customer service but make it sigma energy!")
-            
+
             await interaction.response.send_message(embed=embed, ephemeral=True)
-            
+
             # Send welcome message in ticket
             welcome_embed = discord.Embed(
                 title="🎭 Welcome to Your Support Ticket!",
@@ -5175,41 +5180,41 @@ async def ticket_slash(interaction: discord.Interaction, action: str, reason: st
                 color=0x7289DA
             )
             welcome_embed.set_footer(text="We're here to help! No cap!")
-            
+
             await ticket_channel.send(embed=welcome_embed)
-            
+
         except discord.Forbidden:
             await interaction.response.send_message("❌ I don't have permission to create channels! Check my permissions bestie! 🚫", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to create ticket! Error: {str(e)} 💀", ephemeral=True)
-            
+
     elif action.lower() == 'close':
         # Check if this is a ticket channel
         if not interaction.channel.name.startswith('ticket-'):
             await interaction.response.send_message("❌ This isn't a ticket channel! Use this command in a ticket bestie! 🎫", ephemeral=True)
             return
-            
+
         if not (interaction.user.guild_permissions.manage_channels or 
                 interaction.channel.permissions_for(interaction.user).manage_channels):
             await interaction.response.send_message("🚫 Only staff or the ticket owner can close tickets! 👮‍♂️", ephemeral=True)
             return
-            
+
         embed = discord.Embed(
             title="🎫 TICKET CLOSING!",
             description=f"Ticket closed by {interaction.user.mention}! 🔒\n\nThis channel will be deleted in 10 seconds...\n\nThanks for using our absolutely BUSSIN customer service! ✨",
             color=0xFF0000
         )
         embed.set_footer(text="Hope we could help! Come back anytime!")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
         # Delete channel after delay
         await asyncio.sleep(10)
         try:
             await interaction.channel.delete(reason=f"Ticket closed by {interaction.user}")
         except:
             pass  # Channel might already be deleted
-            
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use: create/close\n\nExample: `/ticket create I need help with roles` 🎫", ephemeral=True)
 
@@ -5247,11 +5252,11 @@ async def roleadd_slash(interaction: discord.Interaction, role: discord.Role, us
     if not interaction.user.guild_permissions.manage_roles:
         await interaction.response.send_message("🚫 Lil bro needs manage roles permission! Ask an admin bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     if role >= interaction.user.top_role and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("💀 You can't give roles higher than your own! That's not how the hierarchy works bestie! 📊", ephemeral=True)
         return
-    
+
     if role >= interaction.guild.me.top_role:
         await interaction.response.send_message("🤖 I can't assign that role! It's higher than mine in the pecking order! Promote me first bestie! 📈", ephemeral=True)
         return
@@ -5262,7 +5267,7 @@ async def roleadd_slash(interaction: discord.Interaction, role: discord.Role, us
 
     try:
         await user.add_roles(role, reason=f"Role added by {interaction.user}: {reason}")
-        
+
         goofy_responses = [
             f"YOOO! {user.mention} just got blessed with {role.mention}! 🎉",
             f"✨ ROLE UPGRADE! {user.mention} is now serving {role.mention} energy! 💅",
@@ -5273,7 +5278,7 @@ async def roleadd_slash(interaction: discord.Interaction, role: discord.Role, us
             f"🌟 GLOW UP ALERT! {user.mention} just became {role.mention}! That aura is IMMACULATE! ✨",
             f"🎪 THE CIRCUS IS EXPANDING! Welcome {role.mention} {user.mention}! Hope you brought snacks! 🍿"
         ]
-        
+
         embed = discord.Embed(
             title="🎭 ROLE ASSIGNMENT COMPLETE!",
             description=f"{random.choice(goofy_responses)}\n\n**User:** {user.mention}\n**Role:** {role.mention}\n**Reason:** {reason}\n**Assigned by:** {interaction.user.mention}",
@@ -5285,9 +5290,9 @@ async def roleadd_slash(interaction: discord.Interaction, role: discord.Role, us
             inline=False
         )
         embed.set_footer(text="Role assignment powered by sigma grindset technology")
-        
+
         await interaction.response.send_message(embed=embed)
-        
+
     except discord.Forbidden:
         await interaction.response.send_message("🚫 I don't have permission to give that role! My powers are limited bestie! 😅", ephemeral=True)
     except Exception as e:
@@ -5303,25 +5308,25 @@ async def massaddrole_slash(interaction: discord.Interaction, role: discord.Role
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("🚫 Only admins can cause this level of chaos! That's too much power for mortals! 💀", ephemeral=True)
         return
-    
+
     if role >= interaction.guild.me.top_role:
         await interaction.response.send_message("🤖 I can't assign that role! It's higher than mine! Promote me to Supreme Overlord first! 👑", ephemeral=True)
         return
 
     # Safety check - confirm the chaos they're about to unleash
     member_count = len([m for m in interaction.guild.members if not (m.bot and exclude_bots) and role not in m.roles])
-    
+
     if member_count == 0:
         await interaction.response.send_message(f"💀 Everyone already has {role.mention}! The chaos has already been unleashed bestie! 🎪", ephemeral=True)
         return
-    
+
     # Send confirmation message
     chaos_warnings = [
         f"⚠️ **CHAOS WARNING!** ⚠️\n\nYou're about to give {role.mention} to **{member_count}** members!\n\nThis will cause MAXIMUM CHAOS and cannot be undone easily!",
         f"🌪️ **ABSOLUTE MADNESS INCOMING!** 🌪️\n\n{member_count} people are about to receive {role.mention}!\n\nYour server will never be the same bestie!",
         f"💀 **POINT OF NO RETURN!** 💀\n\nYou're giving {role.mention} to {member_count} members!\n\nThis is your last chance to reconsider the chaos!"
     ]
-    
+
     embed = discord.Embed(
         title="🎪 MASS ROLE ASSIGNMENT INITIATED!",
         description=f"{random.choice(chaos_warnings)}\n\n**Role:** {role.mention}\n**Target Count:** {member_count} members\n**Exclude Bots:** {'Yes' if exclude_bots else 'No'}\n**Reason:** {reason}",
@@ -5333,65 +5338,65 @@ async def massaddrole_slash(interaction: discord.Interaction, role: discord.Role
         inline=False
     )
     embed.set_footer(text="Mass role assignment - May god have mercy on your server")
-    
+
     await interaction.response.send_message(embed=embed)
-    
+
     # Start the mass assignment
     try:
         success_count = 0
         failed_count = 0
-        
+
         # Send a follow-up message to show progress
         await interaction.followup.send("🚀 **MASS ASSIGNMENT IN PROGRESS...** This might take a while bestie! ⏰")
-        
+
         for member in interaction.guild.members:
             if exclude_bots and member.bot:
                 continue
             if role in member.roles:
                 continue  # Skip if already has role
-                
+
             try:
                 await member.add_roles(role, reason=f"Mass assignment by {interaction.user}: {reason}")
                 success_count += 1
-                
+
                 # Add a small delay to avoid rate limiting
                 if success_count % 5 == 0:
                     await asyncio.sleep(1)  # Rate limiting protection
-                    
+
             except discord.Forbidden:
                 failed_count += 1
             except Exception:
                 failed_count += 1
-        
+
         # Final report
         chaos_results = [
             f"🎉 **CHAOS COMPLETE!** Successfully gave {role.mention} to **{success_count}** members! The server has ascended to peak brainrot! 🧠",
             f"✨ **MASS ASSIGNMENT FINISHED!** {success_count} people now have {role.mention}! Your server's aura just broke the meter! 📊",
             f"🔥 **SIGMA GRINDSET ACTIVATED!** {role.mention} has been distributed to {success_count} members! The collective energy is IMMACULATE! ⚡"
         ]
-        
+
         result_embed = discord.Embed(
             title="🎪 MASS ROLE ASSIGNMENT COMPLETE!",
             description=f"{random.choice(chaos_results)}\n\n**Role:** {role.mention}\n**Successful:** {success_count}\n**Failed:** {failed_count}\n**Total Affected:** {success_count} members",
             color=0x00FF00
         )
-        
+
         if failed_count > 0:
             result_embed.add_field(
                 name="⚠️ Some Failed", 
                 value=f"{failed_count} members couldn't receive the role (permissions/hierarchy issues)", 
                 inline=False
             )
-        
+
         result_embed.add_field(
             name="🎭 Chaos Level", 
             value="MAXIMUM ACHIEVED! 🌪️", 
             inline=False
         )
         result_embed.set_footer(text="Mass chaos deployment successful - Server will never be the same")
-        
+
         await interaction.followup.send(embed=result_embed)
-        
+
     except Exception as e:
         await interaction.followup.send(f"💥 CHAOS MACHINE EXPLODED! Error during mass assignment: {str(e)} 🤪")
 
@@ -5405,15 +5410,15 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("🚫 Only admins can spam everyone's DMs! That's too much power bestie! 💀", ephemeral=True)
         return
-    
+
     # Get members with the role
     target_members = [member for member in interaction.guild.members 
                      if role in member.roles and not (member.bot and exclude_bots)]
-    
+
     if not target_members:
         await interaction.response.send_message(f"💀 No one with {role.mention} to message! The role is emptier than Ohio! 🌽", ephemeral=True)
         return
-    
+
     # Confirmation message
     embed = discord.Embed(
         title="📬 MASS DM SYSTEM ACTIVATED!",
@@ -5430,16 +5435,16 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
         inline=False
     )
     embed.set_footer(text="Mass DM deployment - Use responsibly!")
-    
+
     await interaction.response.send_message(embed=embed)
-    
+
     # Start mass DM process
     try:
         success_count = 0
         failed_count = 0
-        
+
         await interaction.followup.send("🚀 **MASS DM IN PROGRESS...** Sliding into DMs like a sigma! ⏰")
-        
+
         for member in target_members:
             try:
                 # Create personalized embed for each user
@@ -5464,29 +5469,29 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
                     inline=True
                 )
                 dm_embed.set_footer(text="This message was sent using GoofGuard's Mass DM system")
-                
+
                 # Try to send DM
                 await member.send(embed=dm_embed)
                 success_count += 1
-                
+
                 # Rate limiting to avoid Discord limits
                 if success_count % 5 == 0:
                     await asyncio.sleep(2)  # 2 second delay every 5 DMs
-                    
+
             except discord.Forbidden:
                 failed_count += 1  # User has DMs disabled
             except discord.HTTPException:
                 failed_count += 1  # Other Discord API errors
             except Exception:
                 failed_count += 1  # Any other errors
-        
+
         # Final report
         success_responses = [
             f"🎉 **MASS DM COMPLETE!** Successfully slid into **{success_count}** DMs! Your message spread like wildfire! 🔥",
             f"📬 **MISSION ACCOMPLISHED!** {success_count} people got your message! That's some premium communication energy! ✨",
             f"🚀 **DM DEPLOYMENT SUCCESSFUL!** Message delivered to {success_count} users! You just became the main character of their notifications! 👑"
         ]
-        
+
         result_embed = discord.Embed(
             title="📬 MASS DM MISSION COMPLETE!",
             description=f"{random.choice(success_responses)}\n\n"
@@ -5496,23 +5501,23 @@ async def massdm_slash(interaction: discord.Interaction, role: discord.Role, mes
                        f"**Total Attempted:** {len(target_members)} members",
             color=0x00FF00
         )
-        
+
         if failed_count > 0:
             result_embed.add_field(
                 name="⚠️ Some Failed", 
                 value=f"{failed_count} members couldn't receive DMs (probably have them disabled or blocked the bot)", 
                 inline=False
             )
-        
+
         result_embed.add_field(
             name="📊 Success Rate", 
             value=f"{(success_count/len(target_members)*100):.1f}% delivery rate! 📈", 
             inline=False
         )
         result_embed.set_footer(text="Mass DM system - Spreading chaos one notification at a time")
-        
+
         await interaction.followup.send(embed=result_embed)
-        
+
     except Exception as e:
         await interaction.followup.send(f"💥 DM MACHINE BROKE! Error during mass DM: {str(e)} 📬💀")
 
@@ -5528,25 +5533,25 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("🚫 Only admins can setup verification! That's maximum security clearance bestie! 💀", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     if action.lower() == 'setup':
         if not verified_role:
             await interaction.response.send_message("❌ You need to specify a verified role! Can't verify people into nothing bestie! 🎭", ephemeral=True)
             return
-        
+
         if not verify_channel:
             await interaction.response.send_message("❌ You need a verification channel! Where else will the chaos happen? 📺", ephemeral=True)
             return
-        
+
         verification_config[guild_id] = {
             'enabled': True,
             'role': verified_role.id,
             'channel': verify_channel.id
         }
         auto_save_config('verification')  # Save immediately
-        
+
         # Send setup confirmation to admin
         setup_embed = discord.Embed(
             title="🛡️ VERIFICATION SYSTEM ACTIVATED!",
@@ -5568,9 +5573,9 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
             inline=False
         )
         setup_embed.set_footer(text="Verification powered by Ohio-grade security technology")
-        
+
         await interaction.response.send_message(embed=setup_embed)
-        
+
         # Send verification guide embed in the chosen channel
         guide_embed = discord.Embed(
             title="🛡️ HOW TO GET VERIFIED - READ THIS FR FR! 🛡️",
@@ -5579,28 +5584,28 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
                        "**HERE'S THE TEA ON VERIFICATION:**",
             color=0x3498DB
         )
-        
+
         guide_embed.add_field(
             name="📬 Step 1: Check Your DMs!",
             value="As soon as you joined, I slid into your DMs with a captcha! 💌\n"
                   "If you don't see it, check if your DMs are open!",
             inline=False
         )
-        
+
         guide_embed.add_field(
             name="🔢 Step 2: Solve the Captcha",
             value="Type the code EXACTLY as shown in your DMs! 📝\n"
                   "No cap, it's case-sensitive and copy-paste won't work! 🚫",
             inline=False
         )
-        
+
         guide_embed.add_field(
             name="✅ Step 3: Get That Verified Role",
             value=f"Once verified, you'll get the {verified_role.mention} role! 🎉\n"
                   "Then you can see all the good stuff in this server! 👀",
             inline=False
         )
-        
+
         guide_embed.add_field(
             name="❓ Having Issues?",
             value="• **No DM?** Make sure your DMs are open to server members!\n"
@@ -5608,7 +5613,7 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
                   "• **Still stuck?** Ask a staff member for help! 🆘",
             inline=False
         )
-        
+
         guide_embed.add_field(
             name="⚠️ Important Notes",
             value="• You have 3 attempts to get the code right! 💯\n"
@@ -5616,25 +5621,25 @@ async def verify_setup_slash(interaction: discord.Interaction, action: str, veri
                   "• Real humans only - no Ohio residents allowed! 💀",
             inline=False
         )
-        
+
         guide_embed.set_footer(text="Made with 💙 by your friendly neighborhood chaos bot")
-        
+
         try:
             await verify_channel.send(embed=guide_embed)
         except Exception as e:
             logger.error(f"Failed to send verification guide: {e}")
-        
+
     elif action.lower() == 'disable':
         if guild_id in verification_config:
             del verification_config[guild_id]
-            
+
         embed = discord.Embed(
             title="🔓 Verification System Disabled",
             description="Verification system has been turned off. Your server is back to trusting everyone... good luck bestie! 💀",
             color=0xFF0000
         )
         await interaction.response.send_message(embed=embed)
-    
+
     else:
         await interaction.response.send_message("❌ Invalid action! Use 'setup' or 'disable' bestie! 🤪", ephemeral=True)
 
@@ -5657,7 +5662,7 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
         ephemeral=True
     )
     return
-    
+
     # Generate captcha based on difficulty
     if difficulty.lower() == "easy":
         captcha_code = str(random.randint(100, 999))
@@ -5668,7 +5673,7 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
     else:  # medium
         captcha_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=4))
         complexity_desc = "4-character alphanumeric code"
-    
+
     # Store pending verification
     pending_verifications[user.id] = {
         'guild_id': interaction.guild.id,
@@ -5676,7 +5681,7 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
         'attempts': 0,
         'issued_by': interaction.user.id
     }
-    
+
     # Create captcha embed for the user
     captcha_embed = discord.Embed(
         title="🤖 CAPTCHA CHALLENGE ACTIVATED!",
@@ -5696,10 +5701,10 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
         inline=False
     )
     captcha_embed.set_footer(text="Captcha system powered by anti-bot sigma technology")
-    
+
     try:
         await user.send(embed=captcha_embed)
-        
+
         # Confirmation for moderator
         mod_embed = discord.Embed(
             title="🤖 CAPTCHA DEPLOYED!",
@@ -5710,7 +5715,7 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
             color=0x00FF00
         )
         await interaction.response.send_message(embed=mod_embed)
-        
+
     except discord.Forbidden:
         await interaction.response.send_message(f"💀 Can't DM {user.mention}! Their DMs are more closed than Ohio borders! Try a different method! 📬❌", ephemeral=True)
 
@@ -5718,32 +5723,32 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
 @app_commands.describe(code='The captcha code you received')
 async def verify_slash(interaction: discord.Interaction, code: str):
     user_id = interaction.user.id
-    
+
     # Track if we've responded to avoid double responses
     responded = False
-    
+
     try:
         if user_id not in pending_verifications:
             await interaction.response.send_message("❌ No pending verification found! You might already be verified or no captcha was issued! 🤔", ephemeral=True)
             return
-        
+
         verification_data = pending_verifications[user_id]
         correct_code = verification_data['captcha_code']
         attempts = verification_data['attempts']
-        
+
         if code.upper() == correct_code.upper():
             # SUCCESS! Verification complete
             guild_id = str(verification_data['guild_id'])
             guild = bot.get_guild(verification_data['guild_id'])
-            
+
             # Try to give verified role if verification system is enabled
             role_given = False
             role_error = None
-            
+
             if guild_id in verification_config and guild:
                 verified_role_id = verification_config[guild_id]['role']
                 verified_role = guild.get_role(verified_role_id)
-                
+
                 if verified_role:
                     try:
                         # Get the member object from the guild (since we're in DMs)
@@ -5757,11 +5762,11 @@ async def verify_slash(interaction: discord.Interaction, code: str):
                         role_error = "I don't have permission to give you the role! Ask an admin to fix my permissions!"
                     except Exception as e:
                         role_error = f"Error giving role: {str(e)}"
-            
+
             # Remove from pending and save config
             del pending_verifications[user_id]
             auto_save_config('pending_verifications')
-            
+
             # Prepare success message
             if role_error:
                 description = f"✅ **VERIFICATION SUCCESSFUL!** But there was an issue with roles:\n\n❌ {role_error}\n\nAsk a moderator to manually give you the verified role!"
@@ -5776,7 +5781,7 @@ async def verify_slash(interaction: discord.Interaction, code: str):
                 ]
                 description = random.choice(success_responses)
                 color = 0x00FF00
-            
+
             embed = discord.Embed(
                 title="✅ VERIFICATION SUCCESSFUL!",
                 description=description,
@@ -5788,21 +5793,21 @@ async def verify_slash(interaction: discord.Interaction, code: str):
                 inline=False
             )
             embed.set_footer(text="Welcome to the verified human club - Population: You + Everyone Else Who Passed")
-            
+
             await interaction.response.send_message(embed=embed, ephemeral=True)
             responded = True
-            
+
         else:
             # WRONG CODE
             verification_data['attempts'] += 1
             attempts = verification_data['attempts']
             auto_save_config('pending_verifications')
-            
+
             if attempts >= 3:
                 # Failed too many times
                 del pending_verifications[user_id]
                 auto_save_config('pending_verifications')
-                
+
                 fail_embed = discord.Embed(
                     title="❌ VERIFICATION FAILED!",
                     description="🤖 **SUSPICIOUS ACTIVITY DETECTED!** 🤖\n\n"
@@ -5816,13 +5821,13 @@ async def verify_slash(interaction: discord.Interaction, code: str):
                     color=0xFF0000
                 )
                 fail_embed.set_footer(text="Bot detection system - Protecting servers from sus behavior since 2024")
-                
+
                 await interaction.response.send_message(embed=fail_embed, ephemeral=True)
                 responded = True
             else:
                 # Wrong but can try again
                 remaining = 3 - attempts
-                
+
                 retry_embed = discord.Embed(
                     title="❌ Wrong Code!",
                     description=f"That's not the right code bestie! 💀\n\n"
@@ -5833,7 +5838,7 @@ async def verify_slash(interaction: discord.Interaction, code: str):
                 )
                 await interaction.response.send_message(embed=retry_embed, ephemeral=True)
                 responded = True
-    
+
     except Exception as e:
         logger.error(f"Error in verify command: {e}")
         if not responded:
@@ -5847,21 +5852,21 @@ async def verification_status_slash(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.moderate_members:
         await interaction.response.send_message("🚫 You don't have permission to check verification status! Ask a mod bestie! 👮‍♂️", ephemeral=True)
         return
-    
+
     guild_id = str(interaction.guild.id)
-    
+
     embed = discord.Embed(
         title="📋 Verification System Status",
         description="Current verification configuration and pending users",
         color=0x7289DA
     )
-    
+
     # System status
     if guild_id in verification_config:
         config = verification_config[guild_id]
         verified_role = interaction.guild.get_role(config['role'])
         verify_channel = interaction.guild.get_channel(config['channel'])
-        
+
         embed.add_field(
             name="🛡️ System Status",
             value=f"✅ **ACTIVE**\n"
@@ -5875,10 +5880,10 @@ async def verification_status_slash(interaction: discord.Interaction):
             value="❌ **DISABLED**\nUse `/verify-setup setup` to enable verification!",
             inline=False
         )
-    
+
     # Pending verifications
     guild_pending = [user_id for user_id, data in pending_verifications.items() if data['guild_id'] == interaction.guild.id]
-    
+
     if guild_pending:
         pending_users = []
         for user_id in guild_pending[:10]:  # Limit to 10 to avoid embed limits
@@ -5886,7 +5891,7 @@ async def verification_status_slash(interaction: discord.Interaction):
             if user:
                 data = pending_verifications[user_id]
                 pending_users.append(f"• {user.mention} ({data['attempts']}/3 attempts)")
-        
+
         embed.add_field(
             name=f"⏳ Pending Verifications ({len(guild_pending)})",
             value="\n".join(pending_users) if pending_users else "No pending verifications found",
@@ -5898,7 +5903,7 @@ async def verification_status_slash(interaction: discord.Interaction):
             value="No users currently awaiting verification! ✨",
             inline=False
         )
-    
+
     embed.set_footer(text="Verification is now automatic! New members get captcha DMs instantly! ⚡")
     await interaction.response.send_message(embed=embed)
 
@@ -5920,7 +5925,7 @@ async def verification_status_slash(interaction: discord.Interaction):
     app_commands.Choice(name='Ghost Mode', value='ghost')
 ])
 async def tutorial_slash(interaction: discord.Interaction, command: str):
-    
+
     tutorials = {
         'verify': {
             'title': '🛡️ Verification System Tutorial (NEW & IMPROVED!)',
@@ -6050,19 +6055,19 @@ async def tutorial_slash(interaction: discord.Interaction, command: str):
             'tips': '🎨 **FULL CUSTOMIZATION:**\n• 🎨 Custom colors, titles, descriptions, and buttons\n• 📋 Unlimited category types (25 max per Discord limits)\n• 🔄 Easy reset to defaults anytime\n• 🎉 Perfect for any server type - gaming, business, community!'
         }
     }
-    
+
     if command not in tutorials:
         await interaction.response.send_message("❌ Tutorial not found! Use the dropdown to select a valid command bestie! 🤪", ephemeral=True)
         return
-    
+
     tutorial = tutorials[command]
-    
+
     embed = discord.Embed(
         title=tutorial['title'],
         description=tutorial['description'],
         color=tutorial['color']
     )
-    
+
     # Add steps
     for i, step in enumerate(tutorial['steps'], 1):
         embed.add_field(
@@ -6070,7 +6075,7 @@ async def tutorial_slash(interaction: discord.Interaction, command: str):
             value=step,
             inline=False
         )
-    
+
     # Add tips
     if 'tips' in tutorial:
         embed.add_field(
@@ -6078,10 +6083,10 @@ async def tutorial_slash(interaction: discord.Interaction, command: str):
             value=tutorial['tips'],
             inline=False
         )
-    
+
     # Add footer with related commands
     embed.set_footer(text="💡 Tip: Use /help to see all commands, or ask staff if you need help setting up!")
-    
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # 🎮 LEVELING SYSTEM COMMANDS 🎮
@@ -6467,11 +6472,11 @@ def start_bot_with_retry(token, max_retries=3):
     for attempt in range(max_retries):
         try:
             logger.info(f"🤖 Starting Discord bot (attempt {attempt + 1}/{max_retries})...")
-            
+
             # Add connection timeout and enhanced error handling for hosting
             bot.run(token, reconnect=True, log_level=logging.WARNING)
             break  # If we get here, bot ran successfully
-            
+
         except discord.LoginFailure:
             logger.error("❌ Invalid bot token! Check your DISCORD_TOKEN")
             logger.error("Make sure your token is correctly set in environment variables")
@@ -6518,14 +6523,14 @@ if __name__ == "__main__":
     all_env_vars = dict(os.environ)
     discord_vars = {k: ('***' if v else 'EMPTY') for k, v in all_env_vars.items() if 'DISCORD' in k.upper() or 'TOKEN' in k.upper()}
     logger.info(f"Found environment variables: {discord_vars}")
-    
+
     token = os.getenv('DISCORD_TOKEN') or os.getenv('BOT_TOKEN') or os.getenv('TOKEN') or os.getenv('DISCORD_BOT_TOKEN')
     if not token:
         logger.error("❌ No bot token found! Please set DISCORD_TOKEN in your environment variables!")
         logger.error("Supported environment variable names: DISCORD_TOKEN, BOT_TOKEN, TOKEN, DISCORD_BOT_TOKEN")
         logger.error("If you're running on Replit, make sure your secret is properly set.")
         exit(1)
-    
+
     logger.info("✅ Discord token found and loaded successfully!")
 
     logger.info("🚀 Starting Goofy Mod bot with enhanced hosting features...")
@@ -6552,4 +6557,9 @@ if __name__ == "__main__":
         logger.error(f"💥 Critical startup error: {e}")
         exit(1)
     finally:
-        pass
+        # Cleanup and save data before exit
+        logger.info("🧹 Cleaning up before exit...")
+        save_all_configs()
+        save_user_data()
+        save_level_config()
+        logger.info("💾 All data saved successfully. Goodbye!")
