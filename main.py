@@ -360,10 +360,10 @@ def init_database():
                 )
             """))
             
-            # Create unique index to prevent duplicates
+            # Create index for faster lookups
             conn.execute(text("""
-                CREATE UNIQUE INDEX IF NOT EXISTS bot_config_unique 
-                ON bot_config (config_type, COALESCE(guild_id, 'global'))
+                CREATE INDEX IF NOT EXISTS bot_config_type_idx 
+                ON bot_config (config_type)
             """))
             
             conn.commit()
@@ -383,11 +383,14 @@ def save_config(config_type, data=None):
         if USE_DATABASE and engine:
             # Save to database
             with engine.connect() as conn:
+                # Delete existing record first, then insert new one
+                conn.execute(text("""
+                    DELETE FROM bot_config WHERE config_type = :config_type
+                """), {"config_type": config_type})
+                
                 conn.execute(text("""
                     INSERT INTO bot_config (config_type, data) 
                     VALUES (:config_type, :data)
-                    ON CONFLICT ON CONSTRAINT bot_config_unique
-                    DO UPDATE SET data = :data, updated_at = NOW()
                 """), {"config_type": config_type, "data": json.dumps(data)})
                 conn.commit()
             logger.debug(f"✅ Saved {config_type} configuration to database")
