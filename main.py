@@ -138,18 +138,18 @@ class TicketReasonSelect(discord.ui.Select):
             # Create welcome message in ticket channel
             welcome_embed = discord.Embed(
                 title="🎫 SUPPORT TICKET ACTIVATED!",
-                description=f"YO {interaction.user.mention}! Your ticket is absolutely BUSSIN! 🔥\\n\\n"
-                           f"**Reason:** {reason}\\n"
-                           f"**Status:** Staff will be with you ASAP! ⚡\\n\\n"
+                description=f"YO {interaction.user.mention}! Your ticket is absolutely BUSSIN! 🔥\n\n"
+                           f"**Reason:** {reason}\n"
+                           f"**Status:** Staff will be with you ASAP! ⚡\n\n"
                            f"Describe your issue in detail and staff will help you out! ✨",
                 color=0x3498DB
             )
             
             welcome_embed.add_field(
                 name="💡 Pro Tips",
-                value="• Be as detailed as possible about your issue!\\n"
-                      "• Screenshots help staff understand better!\\n"
-                      "• Stay active - we might ask follow-up questions!\\n"
+                value="• Be as detailed as possible about your issue!\n"
+                      "• Screenshots help staff understand better!\n"
+                      "• Stay active - we might ask follow-up questions!\n"
                       "• Use `/ticket close` when your issue is resolved!",
                 inline=False
             )
@@ -161,8 +161,8 @@ class TicketReasonSelect(discord.ui.Select):
             # Confirmation message to user
             success_embed = discord.Embed(
                 title="✅ TICKET CREATED SUCCESSFULLY!",
-                description=f"Your ticket has been created! Head over to {ticket_channel.mention} to get help! 🎉\\n\\n"
-                           f"**Reason:** {reason}\\n"
+                description=f"Your ticket has been created! Head over to {ticket_channel.mention} to get help! 🎉\n\n"
+                           f"**Reason:** {reason}\n"
                            f"Staff have been notified and will assist you shortly! 📢",
                 color=0x00FF00
             )
@@ -203,7 +203,7 @@ class TicketPanelView(discord.ui.View):
         
         embed = discord.Embed(
             title="🎫 CREATE YOUR TICKET",
-            description="Select what type of help you need from the dropdown below! 👇\\n\\n"
+            description="Select what type of help you need from the dropdown below! 👇\n\n"
                        "Choose the option that best matches your situation! ✨",
             color=0x3498DB
         )
@@ -292,13 +292,94 @@ WSGIRequestHandler.log_request = lambda self, code='-', size='-': None
 user_levels = {}
 guild_level_config = {}
 
-# Storage for verification configs
+# All bot configuration storage with persistent JSON files
 verification_config = {}  # {guild_id: {'enabled': bool, 'role': role_id, 'channel': channel_id}}
 pending_verifications = {}  # {user_id: {'guild_id': guild_id, 'captcha_code': str, 'attempts': int}}
-
-# Storage for custom ticket panel configurations
 ticket_panel_config = {}  # {guild_id: {'title': str, 'description': str, 'color': int, 'button_text': str, 'button_emoji': str, 'categories': list}}
 ticket_config = {}  # {guild_id: {'category': category_id, 'staff_role': role_id}}
+autorole_config = {}  # {guild_id: {'roles': [role_ids], 'channel': channel_id}}
+raid_protection_config = {}  # {guild_id: {'enabled': bool, 'threshold': int, 'action': str}}
+
+# Configuration file names
+CONFIG_FILES = {
+    'verification': 'verification_config.json',
+    'pending_verifications': 'pending_verifications.json',
+    'ticket_panel': 'ticket_panel_config.json',
+    'ticket': 'ticket_config.json',
+    'autorole': 'autorole_config.json',
+    'raid_protection': 'raid_protection_config.json'
+}
+
+def save_config(config_type, data=None):
+    """Save specific configuration to JSON file"""
+    try:
+        if config_type not in CONFIG_FILES:
+            logger.error(f"Unknown config type: {config_type}")
+            return False
+        
+        filename = CONFIG_FILES[config_type]
+        
+        # Get the data from globals if not provided
+        if data is None:
+            data = globals().get(f"{config_type}_config", {})
+        
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=2)
+        logger.debug(f"✅ Saved {config_type} configuration to {filename}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to save {config_type} config: {e}")
+        return False
+
+def load_config(config_type):
+    """Load specific configuration from JSON file"""
+    try:
+        if config_type not in CONFIG_FILES:
+            logger.error(f"Unknown config type: {config_type}")
+            return {}
+        
+        filename = CONFIG_FILES[config_type]
+        
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                data = json.load(f)
+                logger.debug(f"✅ Loaded {config_type} configuration from {filename}")
+                return data
+        else:
+            logger.info(f"📁 No existing {config_type} config file found, starting fresh")
+            return {}
+    except Exception as e:
+        logger.error(f"❌ Failed to load {config_type} config: {e}")
+        return {}
+
+def load_all_configs():
+    """Load all bot configurations from files"""
+    global verification_config, pending_verifications, ticket_panel_config
+    global ticket_config, autorole_config, raid_protection_config
+    
+    verification_config = load_config('verification')
+    pending_verifications = load_config('pending_verifications')
+    ticket_panel_config = load_config('ticket_panel')
+    ticket_config = load_config('ticket')
+    autorole_config = load_config('autorole')
+    raid_protection_config = load_config('raid_protection')
+    
+    logger.info("🔄 All bot configurations loaded from persistent storage")
+
+def save_all_configs():
+    """Save all bot configurations to files"""
+    save_config('verification', verification_config)
+    save_config('pending_verifications', pending_verifications)
+    save_config('ticket_panel', ticket_panel_config)
+    save_config('ticket', ticket_config)
+    save_config('autorole', autorole_config)
+    save_config('raid_protection', raid_protection_config)
+    
+    logger.info("💾 All bot configurations saved to persistent storage")
+
+def auto_save_config(config_type):
+    """Automatically save a specific config after modification"""
+    save_config(config_type)
 
 def load_user_data():
     """Load user level data from JSON file"""
@@ -483,8 +564,8 @@ class GoofyMod(discord.Client):
         # 🛡️ VERIFICATION SYSTEM - Handle automatic captcha DM first
         if guild_id in verification_config and verification_config[guild_id]['enabled']:
             try:
-                # Generate automatic captcha for new member
-                captcha_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=4))
+                # Generate automatic captcha for new member (3-digit numbers only)
+                captcha_code = str(random.randint(100, 999))
                 
                 # Store pending verification
                 pending_verifications[member.id] = {
@@ -498,32 +579,32 @@ class GoofyMod(discord.Client):
                 # Create welcome + captcha embed for DM
                 captcha_embed = discord.Embed(
                     title="🎉 WELCOME TO THE SERVER! 🎉",
-                    description=f"YO {member.name}! Welcome to **{member.guild.name}**! 🔥\\n\\n"
-                               f"But hold up bestie... we gotta make sure you're human first! 🤖\\n\\n"
-                               f"🔒 **VERIFICATION REQUIRED** 🔒\\n"
+                    description=f"YO {member.name}! Welcome to **{member.guild.name}**! 🔥\n\n"
+                               f"But hold up bestie... we gotta make sure you're human first! 🤖\n\n"
+                               f"🔒 **VERIFICATION REQUIRED** 🔒\n"
                                f"Complete this captcha to prove you're not a bot!",
                     color=0x3498DB
                 )
                 
                 captcha_embed.add_field(
                     name="🔢 Your Captcha Code",
-                    value=f"`{captcha_code}`\\n\\n**TYPE THIS EXACT CODE** (case-sensitive!)\\n"
+                    value=f"`{captcha_code}`\n\n**TYPE THIS EXACT NUMBER**\n"
                           f"Don't copy-paste - type it manually to prove you're human! 🧠",
                     inline=False
                 )
                 
                 captcha_embed.add_field(
                     name="📝 Instructions",
-                    value="• Type the code exactly as shown above\\n"
-                          "• You have 3 attempts to get it right\\n"
-                          "• No copy-pasting allowed (it won't work!)\\n"
-                          "• Reply in this DM with JUST the code",
+                    value="• Type the 3-digit number exactly as shown above\n"
+                          "• You have 3 attempts to get it right\n"
+                          "• No copy-pasting allowed (it won't work!)\n"
+                          "• Reply in this DM with JUST the number",
                     inline=False
                 )
                 
                 captcha_embed.add_field(
                     name="❓ Need Help?",
-                    value=f"If you're having trouble, ask a staff member in **{member.guild.name}**!\\n"
+                    value=f"If you're having trouble, ask a staff member in **{member.guild.name}**!\n"
                           f"Make sure your DMs are open to server members! 📬",
                     inline=False
                 )
@@ -1085,6 +1166,21 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, re
         return
 
     try:
+        # Send DM notification before banning
+        try:
+            dm_embed = discord.Embed(
+                title="🚨 YOU HAVE BEEN BANNED",
+                description=f"You have been banned from **{interaction.guild.name}**\n\n"
+                           f"**Reason:** {reason}\n"
+                           f"**Moderator:** {interaction.user.name}\n\n"
+                           f"If you believe this was a mistake, contact the server administrators.",
+                color=0xFF0000
+            )
+            dm_embed.set_footer(text="This action is final - you cannot rejoin this server.")
+            await member.send(embed=dm_embed)
+        except (discord.Forbidden, discord.HTTPException):
+            pass  # User has DMs disabled or blocked the bot
+        
         await member.ban(reason=f"Banned by {interaction.user}: {reason}")
         response = random.choice(GOOFY_RESPONSES['ban'])
         embed = discord.Embed(
@@ -1109,6 +1205,21 @@ async def kick_slash(interaction: discord.Interaction, member: discord.Member, r
         return
 
     try:
+        # Send DM notification before kicking
+        try:
+            dm_embed = discord.Embed(
+                title="⚠️ YOU HAVE BEEN KICKED",
+                description=f"You have been kicked from **{interaction.guild.name}**\n\n"
+                           f"**Reason:** {reason}\n"
+                           f"**Moderator:** {interaction.user.name}\n\n"
+                           f"You can rejoin the server if you have an invite link.",
+                color=0xFFA500
+            )
+            dm_embed.set_footer(text="Consider this a warning - improve your behavior to avoid future issues.")
+            await member.send(embed=dm_embed)
+        except (discord.Forbidden, discord.HTTPException):
+            pass  # User has DMs disabled or blocked the bot
+        
         await member.kick(reason=f"Kicked by {interaction.user}: {reason}")
         response = random.choice(GOOFY_RESPONSES['kick'])
         embed = discord.Embed(
@@ -1224,6 +1335,28 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, r
 
     # Add warning to database
     warning_count = add_warning(interaction.guild.id, member.id, reason, interaction.user.id)
+
+    # Send DM notification to user
+    try:
+        dm_embed = discord.Embed(
+            title="⚠️ YOU HAVE RECEIVED A WARNING",
+            description=f"You have been warned in **{interaction.guild.name}**\n\n"
+                       f"**Reason:** {reason}\n"
+                       f"**Warning Count:** {warning_count}\n"
+                       f"**Moderator:** {interaction.user.name}\n\n"
+                       f"Please review the server rules and adjust your behavior accordingly.",
+            color=0xFFFF00
+        )
+        if warning_count >= 3:
+            dm_embed.add_field(
+                name="🚨 DANGER ZONE", 
+                value="You have multiple warnings! Further violations may result in kicks or bans.",
+                inline=False
+            )
+        dm_embed.set_footer(text="This is an official warning - take it seriously to avoid escalation.")
+        await member.send(embed=dm_embed)
+    except (discord.Forbidden, discord.HTTPException):
+        pass  # User has DMs disabled or blocked the bot
 
     response = random.choice(GOOFY_RESPONSES['warn'])
     embed = discord.Embed(
