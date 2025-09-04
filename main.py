@@ -83,52 +83,56 @@ class TicketReasonSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        guild_id = str(interaction.guild.id)
-        
-        if guild_id not in ticket_config:
-            await interaction.response.send_message("❌ Ticket system not enabled! This is some sus behavior... 🤔", ephemeral=True)
-            return
-            
-        config = ticket_config[guild_id]
-        category = interaction.guild.get_channel(config['category'])
-        
-        if not category:
-            await interaction.response.send_message("❌ Ticket category was deleted! Ask an admin to reconfigure! 🗑️", ephemeral=True)
-            return
-        
-        # Get reason description (check for custom categories first)
-        if self.guild_id in ticket_panel_config and 'categories' in ticket_panel_config[self.guild_id]:
-            custom_categories = ticket_panel_config[self.guild_id]['categories']
-            reason_map = {cat['value']: cat['label'] + ' - ' + cat['description'] for cat in custom_categories}
-        else:
-            # Default reason map
-            reason_map = {
-                "general": "General Support - Need help with something!",
-                "bug": "Bug Report - Found a glitch that needs fixing!",
-                "account": "Account Issues - Problems with roles/permissions!",
-                "server": "Server Questions - Need info about rules/features!",
-                "report": "Report User/Content - Reporting inappropriate behavior!",
-                "other": "Other - Custom issue that needs attention!"
-            }
-        
-        reason = reason_map.get(self.values[0], "General Support")
-        
-        # Create ticket channel
-        ticket_name = f"ticket-{interaction.user.name}-{int(time.time())}"
-        
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        
-        # Add staff role if configured
-        if config.get('staff_role'):
-            staff_role = interaction.guild.get_role(config['staff_role'])
-            if staff_role:
-                overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        # Track if we've responded to avoid double responses
+        responded = False
         
         try:
+            guild_id = str(interaction.guild.id)
+            
+            if guild_id not in ticket_config:
+                await interaction.response.send_message("❌ Ticket system not enabled! This is some sus behavior... 🤔", ephemeral=True)
+                return
+                
+            config = ticket_config[guild_id]
+            category = interaction.guild.get_channel(config['category'])
+            
+            if not category:
+                await interaction.response.send_message("❌ Ticket category was deleted! Ask an admin to reconfigure! 🗑️", ephemeral=True)
+                return
+            
+            # Get reason description (check for custom categories first)
+            if self.guild_id in ticket_panel_config and 'categories' in ticket_panel_config[self.guild_id]:
+                custom_categories = ticket_panel_config[self.guild_id]['categories']
+                reason_map = {cat['value']: cat['label'] + ' - ' + cat['description'] for cat in custom_categories}
+            else:
+                # Default reason map
+                reason_map = {
+                    "general": "General Support - Need help with something!",
+                    "bug": "Bug Report - Found a glitch that needs fixing!",
+                    "account": "Account Issues - Problems with roles/permissions!",
+                    "server": "Server Questions - Need info about rules/features!",
+                    "report": "Report User/Content - Reporting inappropriate behavior!",
+                    "other": "Other - Custom issue that needs attention!"
+                }
+            
+            reason = reason_map.get(self.values[0], "General Support")
+            
+            # Create ticket channel
+            ticket_name = f"ticket-{interaction.user.name}-{int(time.time())}"
+            
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            
+            # Add staff role if configured
+            if config.get('staff_role'):
+                staff_role = interaction.guild.get_role(config['staff_role'])
+                if staff_role:
+                    overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
+            # Create the ticket channel
             ticket_channel = await category.create_text_channel(
                 name=ticket_name,
                 overwrites=overwrites,
@@ -168,9 +172,15 @@ class TicketReasonSelect(discord.ui.Select):
             )
             
             await interaction.response.send_message(embed=success_embed, ephemeral=True)
+            responded = True
             
         except Exception as e:
-            await interaction.response.send_message(f"💥 Failed to create ticket! Error: {str(e)} 🚨", ephemeral=True)
+            logger.error(f"Error creating ticket: {e}")
+            if not responded:
+                try:
+                    await interaction.response.send_message(f"💥 Failed to create ticket! Error: {str(e)} 🚨", ephemeral=True)
+                except:
+                    pass  # Interaction might already be responded to
 
 class TicketPanelView(discord.ui.View):
     """Interactive ticket creation panel with buttons and dropdowns"""
@@ -5709,100 +5719,128 @@ async def captcha_slash(interaction: discord.Interaction, user: discord.Member, 
 async def verify_slash(interaction: discord.Interaction, code: str):
     user_id = interaction.user.id
     
-    if user_id not in pending_verifications:
-        await interaction.response.send_message("❌ No pending verification found! You might already be verified or no captcha was issued! 🤔", ephemeral=True)
-        return
+    # Track if we've responded to avoid double responses
+    responded = False
     
-    verification_data = pending_verifications[user_id]
-    correct_code = verification_data['captcha_code']
-    attempts = verification_data['attempts']
-    
-    if code.upper() == correct_code.upper():
-        # SUCCESS! Verification complete
-        guild_id = str(verification_data['guild_id'])
-        guild = bot.get_guild(verification_data['guild_id'])
+    try:
+        if user_id not in pending_verifications:
+            await interaction.response.send_message("❌ No pending verification found! You might already be verified or no captcha was issued! 🤔", ephemeral=True)
+            return
         
-        # Give verified role if verification system is enabled
-        if guild_id in verification_config:
-            verified_role_id = verification_config[guild_id]['role']
-            verified_role = guild.get_role(verified_role_id)
-            
-            if verified_role:
-                try:
-                    # Get the member object from the guild (since we're in DMs)
-                    member = guild.get_member(interaction.user.id)
-                    if member:
-                        await member.add_roles(verified_role, reason="✅ Captcha verification successful!")
-                    else:
-                        await interaction.response.send_message("❌ Error: Could not find you in the server! You might have left! 😅", ephemeral=True)
-                        return
-                except discord.Forbidden:
-                    await interaction.response.send_message("✅ Verification successful but I couldn't give you the role! Ask an admin to fix my permissions! 😅", ephemeral=True)
-                    return
-        
-        # Remove from pending and save config
-        del pending_verifications[user_id]
-        auto_save_config('pending_verifications')
-        
-        success_responses = [
-            "🎉 **HUMAN VERIFICATION COMPLETE!** Welcome to the elite human club bestie! 🧠",
-            "✅ **CAPTCHA CRUSHED!** Your human status has been officially certified! 👑",
-            "🔥 **VERIFICATION SUCCESSFUL!** You've proven you're not an Ohio bot! Congrats! 🌽",
-            "⚡ **HUMAN CONFIRMED!** Your sigma energy levels are off the charts! Welcome! 💪",
-            "🎭 **ACCESS GRANTED!** You've passed the vibe check and the bot check! Double win! 🏆"
-        ]
-        
-        embed = discord.Embed(
-            title="✅ VERIFICATION SUCCESSFUL!",
-            description=random.choice(success_responses),
-            color=0x00FF00
-        )
-        embed.add_field(
-            name="🎯 Status Update", 
-            value="You now have full access to the server! Time to cause some chaos! 😈", 
-            inline=False
-        )
-        embed.set_footer(text="Welcome to the verified human club - Population: You + Everyone Else Who Passed")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-    else:
-        # WRONG CODE
-        verification_data['attempts'] += 1
+        verification_data = pending_verifications[user_id]
+        correct_code = verification_data['captcha_code']
         attempts = verification_data['attempts']
         
-        if attempts >= 3:
-            # Failed too many times
+        if code.upper() == correct_code.upper():
+            # SUCCESS! Verification complete
+            guild_id = str(verification_data['guild_id'])
+            guild = bot.get_guild(verification_data['guild_id'])
+            
+            # Try to give verified role if verification system is enabled
+            role_given = False
+            role_error = None
+            
+            if guild_id in verification_config and guild:
+                verified_role_id = verification_config[guild_id]['role']
+                verified_role = guild.get_role(verified_role_id)
+                
+                if verified_role:
+                    try:
+                        # Get the member object from the guild (since we're in DMs)
+                        member = guild.get_member(interaction.user.id)
+                        if member:
+                            await member.add_roles(verified_role, reason="✅ Captcha verification successful!")
+                            role_given = True
+                        else:
+                            role_error = "Could not find you in the server! You might have left!"
+                    except discord.Forbidden:
+                        role_error = "I don't have permission to give you the role! Ask an admin to fix my permissions!"
+                    except Exception as e:
+                        role_error = f"Error giving role: {str(e)}"
+            
+            # Remove from pending and save config
             del pending_verifications[user_id]
+            auto_save_config('pending_verifications')
             
-            fail_embed = discord.Embed(
-                title="❌ VERIFICATION FAILED!",
-                description="🤖 **SUSPICIOUS ACTIVITY DETECTED!** 🤖\n\n"
-                           f"You've failed captcha verification {attempts} times!\n"
-                           f"Your human status is now **HIGHLY QUESTIONABLE** 👀\n\n"
-                           f"**Possible Explanations:**\n"
-                           f"• You're actually a bot 🤖\n"
-                           f"• You're from Ohio (understandable) 🌽\n"
-                           f"• Your brain is in brainrot mode 🧠\n\n"
-                           f"**Next Steps:** Ask a moderator to verify you manually, or try again later!",
-                color=0xFF0000
+            # Prepare success message
+            if role_error:
+                description = f"✅ **VERIFICATION SUCCESSFUL!** But there was an issue with roles:\n\n❌ {role_error}\n\nAsk a moderator to manually give you the verified role!"
+                color = 0xFFA500  # Orange for partial success
+            else:
+                success_responses = [
+                    "🎉 **HUMAN VERIFICATION COMPLETE!** Welcome to the elite human club bestie! 🧠",
+                    "✅ **CAPTCHA CRUSHED!** Your human status has been officially certified! 👑",
+                    "🔥 **VERIFICATION SUCCESSFUL!** You've proven you're not an Ohio bot! Congrats! 🌽",
+                    "⚡ **HUMAN CONFIRMED!** Your sigma energy levels are off the charts! Welcome! 💪",
+                    "🎭 **ACCESS GRANTED!** You've passed the vibe check and the bot check! Double win! 🏆"
+                ]
+                description = random.choice(success_responses)
+                color = 0x00FF00
+            
+            embed = discord.Embed(
+                title="✅ VERIFICATION SUCCESSFUL!",
+                description=description,
+                color=color
             )
-            fail_embed.set_footer(text="Bot detection system - Protecting servers from sus behavior since 2024")
+            embed.add_field(
+                name="🎯 Status Update", 
+                value="You now have access to the server! Time to cause some chaos! 😈" if role_given else "Ask a moderator to give you the verified role to get full access!", 
+                inline=False
+            )
+            embed.set_footer(text="Welcome to the verified human club - Population: You + Everyone Else Who Passed")
             
-            await interaction.response.send_message(embed=fail_embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            responded = True
+            
         else:
-            # Wrong but can try again
-            remaining = 3 - attempts
+            # WRONG CODE
+            verification_data['attempts'] += 1
+            attempts = verification_data['attempts']
+            auto_save_config('pending_verifications')
             
-            retry_embed = discord.Embed(
-                title="❌ Wrong Code!",
-                description=f"That's not the right code bestie! 💀\n\n"
-                           f"**Attempts:** {attempts}/3\n"
-                           f"**Remaining:** {remaining} attempts\n\n"
-                           f"Double-check the code and try again! Make sure you're typing it exactly as shown! 🔍",
-                color=0xFFA500
-            )
-            await interaction.response.send_message(embed=retry_embed, ephemeral=True)
+            if attempts >= 3:
+                # Failed too many times
+                del pending_verifications[user_id]
+                auto_save_config('pending_verifications')
+                
+                fail_embed = discord.Embed(
+                    title="❌ VERIFICATION FAILED!",
+                    description="🤖 **SUSPICIOUS ACTIVITY DETECTED!** 🤖\n\n"
+                               f"You've failed captcha verification {attempts} times!\n"
+                               f"Your human status is now **HIGHLY QUESTIONABLE** 👀\n\n"
+                               f"**Possible Explanations:**\n"
+                               f"• You're actually a bot 🤖\n"
+                               f"• You're from Ohio (understandable) 🌽\n"
+                               f"• Your brain is in brainrot mode 🧠\n\n"
+                               f"**Next Steps:** Ask a moderator to verify you manually, or try again later!",
+                    color=0xFF0000
+                )
+                fail_embed.set_footer(text="Bot detection system - Protecting servers from sus behavior since 2024")
+                
+                await interaction.response.send_message(embed=fail_embed, ephemeral=True)
+                responded = True
+            else:
+                # Wrong but can try again
+                remaining = 3 - attempts
+                
+                retry_embed = discord.Embed(
+                    title="❌ Wrong Code!",
+                    description=f"That's not the right code bestie! 💀\n\n"
+                               f"**Attempts:** {attempts}/3\n"
+                               f"**Remaining:** {remaining} attempts\n\n"
+                               f"Double-check the code and try again! Make sure you're typing it exactly as shown! 🔍",
+                    color=0xFFA500
+                )
+                await interaction.response.send_message(embed=retry_embed, ephemeral=True)
+                responded = True
+    
+    except Exception as e:
+        logger.error(f"Error in verify command: {e}")
+        if not responded:
+            try:
+                await interaction.response.send_message(f"❌ An error occurred during verification! Please try again or contact a moderator! Error: {str(e)}", ephemeral=True)
+            except:
+                pass  # Interaction might already be responded to
 
 @tree.command(name='verification-status', description='📋 Check verification system status and pending users')
 async def verification_status_slash(interaction: discord.Interaction):
